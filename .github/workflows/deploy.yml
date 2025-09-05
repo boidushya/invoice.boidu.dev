@@ -28,6 +28,7 @@ jobs:
       - name: Setup wrangler.toml
         run: |
           cp wrangler.toml.example wrangler.toml
+          sed -i 's/your-account-id/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/g' wrangler.toml
           sed -i 's/your-kv-namespace-id/${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}/g' wrangler.toml
           sed -i 's/your-preview-kv-namespace-id/${{ secrets.CLOUDFLARE_KV_PREVIEW_ID }}/g' wrangler.toml
           sed -i 's/generate-an-auth-secret-here/${{ secrets.AUTH_SECRET }}/g' wrangler.toml
