@@ -3,7 +3,7 @@ import { FolderStorage, InvoiceStorage, UserStorage } from '@/utils/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 // Mock KV implementation for testing
-class MockKV implements KVNamespace {
+class MockKV {
   private data = new Map<string, string>();
 
   async get(key: string): Promise<string | null> {
@@ -22,12 +22,14 @@ class MockKV implements KVNamespace {
     KVNamespaceListResult<unknown, string>
   > {
     const keys = Array.from(this.data.keys());
-    const filteredKeys = options?.prefix ? keys.filter((k) => k.startsWith(options.prefix)) : keys;
+    const filteredKeys = options?.prefix
+      ? keys.filter((k) => k.startsWith(options.prefix ?? ''))
+      : keys;
 
     return {
       keys: filteredKeys.slice(0, options?.limit || 100).map((name) => ({ name })),
       list_complete: true,
-      cursor: undefined,
+      cacheStatus: null,
     };
   }
 
@@ -50,7 +52,7 @@ describe('UserStorage', () => {
 
   beforeEach(() => {
     mockKV = new MockKV();
-    userStorage = new UserStorage(mockKV);
+    userStorage = new UserStorage(mockKV as unknown as KVNamespace);
   });
 
   const sampleUser: User = {
@@ -158,7 +160,7 @@ describe('FolderStorage', () => {
 
   beforeEach(() => {
     mockKV = new MockKV();
-    folderStorage = new FolderStorage(mockKV);
+    folderStorage = new FolderStorage(mockKV as unknown as KVNamespace);
   });
 
   const sampleFolderDefaults = {
@@ -302,7 +304,7 @@ describe('InvoiceStorage', () => {
 
   beforeEach(() => {
     mockKV = new MockKV();
-    invoiceStorage = new InvoiceStorage(mockKV);
+    invoiceStorage = new InvoiceStorage(mockKV as unknown as KVNamespace);
   });
 
   const sampleInvoiceRequest: CreateInvoiceRequest = {

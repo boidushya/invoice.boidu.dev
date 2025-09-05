@@ -106,17 +106,27 @@ invoiceRoutes.get('/:id', requireAuth(), async (c) => {
     const invoiceId = c.req.param('id');
 
     const invoiceStorage = new InvoiceStorage(c.env.INVOICE_KV);
-    const metadata = await invoiceStorage.getInvoiceMetadata(invoiceId);
+    const invoice = await invoiceStorage.getInvoice(invoiceId);
 
-    if (!metadata) {
+    if (!invoice) {
       return c.json({ error: 'Invoice not found' }, 404);
     }
 
-    if (metadata.userId !== userId) {
+    if (invoice.metadata.userId !== userId) {
       return c.json({ error: 'Access denied' }, 403);
     }
 
-    return c.json(metadata);
+    // Generate PDF and return it
+    const pdfGenerator = new InvoicePDFGenerator(c.env);
+    const pdfBytes = await pdfGenerator.generateInvoicePDF(invoice.request, invoiceId);
+
+    return new Response(pdfBytes, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${invoiceId}.pdf"`,
+        'Cache-Control': 'no-cache',
+      },
+    });
   } catch (error) {
     console.error('Error fetching invoice:', error);
     return c.json({ error: 'Internal server error' }, 500);

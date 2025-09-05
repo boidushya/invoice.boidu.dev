@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 describe('Invoice Default Values', () => {
   it('should set currency default to USD', () => {
-    const currency = undefined || 'USD';
+    const providedCurrency: string | undefined = undefined;
+    const currency = providedCurrency || 'USD';
     expect(currency).toBe('USD');
   });
 
   it('should set issueDate default to today', () => {
     const today = new Date().toISOString().split('T')[0];
-    const issueDate = undefined || today;
+    const providedIssueDate: string | undefined = undefined;
+    const issueDate = providedIssueDate || today;
 
     expect(issueDate).toBe(today);
     expect(issueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);

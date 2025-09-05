@@ -196,6 +196,10 @@ export class InvoiceStorage {
     return data ? JSON.parse(data) : null;
   }
 
+  async getInvoice(id: string): Promise<InvoiceStorageData | null> {
+    return this.getInvoiceData(id);
+  }
+
   async listInvoicesByUser(
     userId: string,
     limit = 20,

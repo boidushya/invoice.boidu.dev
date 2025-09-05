@@ -29,7 +29,7 @@
     }
   },
   "files": {
-    "include": ["src/**/*.ts", "tests/**/*.ts"],
+    "include": ["src/**/*.ts", "tests/**/*.ts", "cli/**/*.ts"],
     "ignore": ["node_modules", "dist", ".wrangler"]
   }
 }

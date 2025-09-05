@@ -1,0 +1,104 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'package.json'
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version-check.outputs.should_release }}
+      new_version: ${{ steps.version-check.outputs.new_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version from package.json
+        id: get-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "current_version=v$VERSION" >> $GITHUB_OUTPUT
+          echo "version_number=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if release exists
+        id: version-check
+        run: |
+          VERSION="${{ steps.get-version.outputs.current_version }}"
+          
+          # Check if release already exists
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release $VERSION does not exist, creating new release"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "new_version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build CLI
+        run: pnpm run build:cli
+
+      - name: Update VERSION in install.sh
+        run: |
+          VERSION="${{ needs.check-version.outputs.new_version }}"
+          VERSION_NUMBER=${VERSION#v}
+          sed -i "s/VERSION=.*/VERSION=$VERSION_NUMBER/" public/install.sh
+          echo "Updated VERSION in install.sh to $VERSION_NUMBER"
+
+      - name: Commit install.sh changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add public/install.sh
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update VERSION in install.sh to ${{ needs.check-version.outputs.new_version }}"
+            git push
+          fi
+
+      - name: Create Release
+        run: |
+          VERSION="${{ needs.check-version.outputs.new_version }}"
+          
+          # Create release with the CLI binary
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --notes "Automated release for version $VERSION" \
+            --latest \
+            dist-cli/index.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

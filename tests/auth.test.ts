@@ -3,7 +3,7 @@ import { AuthService } from '@/utils/auth';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 // Mock KV implementation for testing
-class MockKV implements KVNamespace {
+class MockKV {
   private data = new Map<string, string>();
 
   async get(key: string): Promise<string | null> {
@@ -37,7 +37,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     mockKV = new MockKV();
-    authService = new AuthService(mockKV, 'test-secret');
+    authService = new AuthService(mockKV as unknown as KVNamespace, 'test-secret');
   });
 
   describe('API Key Management', () => {
