@@ -59,6 +59,7 @@ export const createInvoiceSchema = z.object({
     .optional()
     .default(0),
   notes: z.string().optional(),
+  status: z.enum(['due', 'paid']).optional().default('due'),
 });
 
 export const authHeaderSchema = z.object({
@@ -74,6 +75,10 @@ export const searchSchema = z.object({
   q: z.string().min(2, 'Search query must be at least 2 characters'),
 });
 
+export const updateInvoiceStatusSchema = z.object({
+  status: z.enum(['due', 'paid']),
+});
+
 export type ContactInput = z.infer<typeof contactSchema>;
 export type InvoiceItemInput = z.infer<typeof invoiceItemSchema>;
 export type UserDefaultsInput = z.infer<typeof userDefaultsSchema>;
@@ -84,3 +89,4 @@ export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type AuthHeaderInput = z.infer<typeof authHeaderSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
 export type SearchInput = z.infer<typeof searchSchema>;
+export type UpdateInvoiceStatusInput = z.infer<typeof updateInvoiceStatusSchema>;

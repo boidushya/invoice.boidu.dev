@@ -9,7 +9,7 @@
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check .",
-    "test": "vitest",
+    "test": "vitest run",
     "build": "tsc",
     "wrangler": "wrangler"
   },

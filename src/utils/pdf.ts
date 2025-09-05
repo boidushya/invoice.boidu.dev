@@ -98,12 +98,49 @@ export class InvoicePDFGenerator {
     yPosition -= 4;
 
     // Header section
+    const invoiceHeaderX = margin;
+    const invoiceTextWidth = fontSemibold.widthOfTextAtSize('Invoice', headerFontSize);
+
     page.drawText('Invoice', {
-      x: margin,
+      x: invoiceHeaderX,
       y: yPosition - headerFontSize / 2,
       size: headerFontSize,
       font: fontSemibold,
       color: primary,
+    });
+
+    // Status pill next to Invoice text
+    const status = request.status || 'due';
+    const statusColors = {
+      due: { bg: rgb(1, 0.95, 0.6), text: rgb(0.5, 0.4, 0) }, // Yellow background, dark text
+      paid: { bg: rgb(0.8, 0.95, 0.8), text: rgb(0.1, 0.4, 0.1) }, // Green background, dark text
+    };
+
+    const statusText = status.toUpperCase();
+    const statusFontSize = 8;
+    const statusPadding = 6;
+    const statusTextWidth = font.widthOfTextAtSize(statusText, statusFontSize);
+    const statusPillWidth = statusTextWidth + statusPadding * 2;
+    const statusPillHeight = 16;
+    const statusX = invoiceHeaderX + invoiceTextWidth + 12;
+    const statusY = yPosition - headerFontSize / 2 + 7;
+
+    // Draw status pill background
+    page.drawRectangle({
+      x: statusX,
+      y: statusY - statusPillHeight / 2,
+      width: statusPillWidth,
+      height: statusPillHeight,
+      color: statusColors[status].bg,
+    });
+
+    // Draw status text
+    page.drawText(statusText, {
+      x: statusX + statusPadding,
+      y: statusY - statusFontSize / 2 + 1,
+      size: statusFontSize,
+      font: fontSemibold,
+      color: statusColors[status].text,
     });
 
     page.drawText(`#${invoiceId}`, {

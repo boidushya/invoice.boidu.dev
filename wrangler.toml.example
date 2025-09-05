@@ -9,6 +9,7 @@ preview_id = "your-preview-kv-namespace-id"
 
 [vars]
 ENVIRONMENT = "production"
+AUTH_SECRET = "generate-an-auth-secret-here" # replace with a secure value such as crypto.randomUUID()
 
 # Include font assets - this will serve files from src/assets at the root
 [assets]

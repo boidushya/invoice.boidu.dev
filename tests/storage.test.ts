@@ -537,4 +537,236 @@ describe('InvoiceStorage', () => {
     const results = await invoiceStorage.searchInvoices('emptyuser', 'nonexistent');
     expect(results).toEqual([]);
   });
+
+  it('should save invoice with default status (due)', async () => {
+    const metadata = await invoiceStorage.saveInvoice(
+      'statususer',
+      'statusfolder',
+      sampleInvoiceRequest,
+      1,
+      'StatusCorp'
+    );
+
+    expect(metadata.status).toBe('due');
+  });
+
+  it('should save invoice with explicit due status', async () => {
+    const requestWithDueStatus = {
+      ...sampleInvoiceRequest,
+      status: 'due' as const,
+    };
+
+    const metadata = await invoiceStorage.saveInvoice(
+      'statususer',
+      'statusfolder',
+      requestWithDueStatus,
+      2,
+      'StatusCorp'
+    );
+
+    expect(metadata.status).toBe('due');
+  });
+
+  it('should save invoice with paid status', async () => {
+    const requestWithPaidStatus = {
+      ...sampleInvoiceRequest,
+      status: 'paid' as const,
+    };
+
+    const metadata = await invoiceStorage.saveInvoice(
+      'statususer',
+      'statusfolder',
+      requestWithPaidStatus,
+      3,
+      'StatusCorp'
+    );
+
+    expect(metadata.status).toBe('paid');
+  });
+
+  it('should update invoice status from due to paid', async () => {
+    // Create invoice with due status
+    const metadata = await invoiceStorage.saveInvoice(
+      'updateuser',
+      'updatefolder',
+      sampleInvoiceRequest,
+      1,
+      'UpdateCorp'
+    );
+
+    expect(metadata.status).toBe('due');
+
+    // Update to paid
+    const updatedMetadata = await invoiceStorage.updateInvoiceStatus(metadata.id, 'paid');
+
+    expect(updatedMetadata).not.toBeNull();
+    if (updatedMetadata) {
+      expect(updatedMetadata.status).toBe('paid');
+      expect(updatedMetadata.id).toBe(metadata.id);
+      expect(updatedMetadata.total).toBe(metadata.total);
+    }
+  });
+
+  it('should update invoice status from paid to due', async () => {
+    // Create invoice with paid status
+    const requestWithPaidStatus = {
+      ...sampleInvoiceRequest,
+      status: 'paid' as const,
+    };
+
+    const metadata = await invoiceStorage.saveInvoice(
+      'updateuser2',
+      'updatefolder2',
+      requestWithPaidStatus,
+      1,
+      'UpdateCorp2'
+    );
+
+    expect(metadata.status).toBe('paid');
+
+    // Update to due
+    const updatedMetadata = await invoiceStorage.updateInvoiceStatus(metadata.id, 'due');
+
+    expect(updatedMetadata).not.toBeNull();
+    if (updatedMetadata) {
+      expect(updatedMetadata.status).toBe('due');
+      expect(updatedMetadata.id).toBe(metadata.id);
+    }
+  });
+
+  it('should return null when updating non-existent invoice status', async () => {
+    const result = await invoiceStorage.updateInvoiceStatus('NON-EXISTENT-ID', 'paid');
+    expect(result).toBeNull();
+  });
+
+  it('should persist status update in both full data and metadata', async () => {
+    // Create invoice
+    const metadata = await invoiceStorage.saveInvoice(
+      'persistuser',
+      'persistfolder',
+      sampleInvoiceRequest,
+      1,
+      'PersistCorp'
+    );
+
+    // Update status
+    await invoiceStorage.updateInvoiceStatus(metadata.id, 'paid');
+
+    // Verify full data was updated
+    const fullData = await invoiceStorage.getInvoiceData(metadata.id);
+    expect(fullData).not.toBeNull();
+    if (fullData) {
+      expect(fullData.metadata.status).toBe('paid');
+    }
+
+    // Verify metadata was updated
+    const updatedMetadata = await invoiceStorage.getInvoiceMetadata(metadata.id);
+    expect(updatedMetadata).not.toBeNull();
+    if (updatedMetadata) {
+      expect(updatedMetadata.status).toBe('paid');
+    }
+  });
+
+  it('should preserve all other invoice data when updating status', async () => {
+    const complexRequest = {
+      ...sampleInvoiceRequest,
+      notes: 'Original notes',
+      taxRate: 15,
+      discountRate: 10,
+    };
+
+    const metadata = await invoiceStorage.saveInvoice(
+      'preserveuser',
+      'preservefolder',
+      complexRequest,
+      1,
+      'PreserveCorp'
+    );
+
+    const originalTotal = metadata.total;
+    const originalBuyer = metadata.buyer;
+
+    // Update status
+    const updatedMetadata = await invoiceStorage.updateInvoiceStatus(metadata.id, 'paid');
+
+    expect(updatedMetadata).not.toBeNull();
+    if (updatedMetadata) {
+      expect(updatedMetadata.status).toBe('paid');
+      expect(updatedMetadata.total).toBe(originalTotal);
+      expect(updatedMetadata.buyer).toBe(originalBuyer);
+      expect(updatedMetadata.currency).toBe(metadata.currency);
+      expect(updatedMetadata.issueDate).toBe(metadata.issueDate);
+      expect(updatedMetadata.dueDate).toBe(metadata.dueDate);
+    }
+
+    // Verify full data preservation
+    const fullData = await invoiceStorage.getInvoiceData(metadata.id);
+    if (fullData) {
+      expect(fullData.request.notes).toBe('Original notes');
+      expect(fullData.request.taxRate).toBe(15);
+      expect(fullData.request.discountRate).toBe(10);
+    }
+  });
+
+  it('should handle multiple invoices with different statuses', async () => {
+    const userId = 'multistatususer';
+    const folderId = 'multistatusfolder';
+
+    // Create invoices with different statuses
+    const dueInvoice = await invoiceStorage.saveInvoice(
+      userId,
+      folderId,
+      { ...sampleInvoiceRequest, status: 'due' },
+      1,
+      'MultiCorp'
+    );
+
+    const paidInvoice = await invoiceStorage.saveInvoice(
+      userId,
+      folderId,
+      { ...sampleInvoiceRequest, status: 'paid' },
+      2,
+      'MultiCorp'
+    );
+
+    const defaultInvoice = await invoiceStorage.saveInvoice(
+      userId,
+      folderId,
+      sampleInvoiceRequest,
+      3,
+      'MultiCorp'
+    );
+
+    // List all invoices
+    const result = await invoiceStorage.listInvoicesByUser(userId, 10);
+    expect(result.invoices).toHaveLength(3);
+
+    // Verify statuses
+    const invoiceById = new Map(result.invoices.map((inv) => [inv.id, inv]));
+    expect(invoiceById.get(dueInvoice.id)?.status).toBe('due');
+    expect(invoiceById.get(paidInvoice.id)?.status).toBe('paid');
+    expect(invoiceById.get(defaultInvoice.id)?.status).toBe('due'); // default
+  });
+
+  it('should handle status updates with concurrent modifications', async () => {
+    const metadata = await invoiceStorage.saveInvoice(
+      'concurrentuser',
+      'concurrentfolder',
+      sampleInvoiceRequest,
+      1,
+      'ConcurrentCorp'
+    );
+
+    // First update
+    const firstUpdate = await invoiceStorage.updateInvoiceStatus(metadata.id, 'paid');
+    expect(firstUpdate?.status).toBe('paid');
+
+    // Second update
+    const secondUpdate = await invoiceStorage.updateInvoiceStatus(metadata.id, 'due');
+    expect(secondUpdate?.status).toBe('due');
+
+    // Verify final state
+    const finalMetadata = await invoiceStorage.getInvoiceMetadata(metadata.id);
+    expect(finalMetadata?.status).toBe('due');
+  });
 });

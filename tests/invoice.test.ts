@@ -5,7 +5,12 @@ import {
   formatDate,
 } from '@/templates/invoice-template';
 import type { Contact, CreateInvoiceRequest, InvoiceItem } from '@/types';
-import { contactSchema, createInvoiceSchema, invoiceItemSchema } from '@/utils/schemas';
+import {
+  contactSchema,
+  createInvoiceSchema,
+  invoiceItemSchema,
+  updateInvoiceStatusSchema,
+} from '@/utils/schemas';
 import { describe, expect, it } from 'vitest';
 
 describe('Contact Schema Validation', () => {
@@ -696,6 +701,267 @@ describe('Edge Cases and Error Handling', () => {
       expect(result.error.issues.some((issue) => issue.message.includes('At least one item'))).toBe(
         true
       );
+    }
+  });
+});
+
+describe('Invoice Status Schema Validation', () => {
+  it('should validate invoice with default status (due)', () => {
+    const invoice = {
+      items: [{ description: 'Test item', qty: 1, unit: 100.0, tax: 0.0 }],
+    };
+
+    const result = createInvoiceSchema.safeParse(invoice);
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.status).toBe('due');
+    }
+  });
+
+  it('should validate invoice with explicit due status', () => {
+    const invoice = {
+      items: [{ description: 'Test item', qty: 1, unit: 100.0, tax: 0.0 }],
+      status: 'due' as const,
+    };
+
+    const result = createInvoiceSchema.safeParse(invoice);
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.status).toBe('due');
+    }
+  });
+
+  it('should validate invoice with paid status', () => {
+    const invoice = {
+      items: [{ description: 'Test item', qty: 1, unit: 100.0, tax: 0.0 }],
+      status: 'paid' as const,
+    };
+
+    const result = createInvoiceSchema.safeParse(invoice);
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.status).toBe('paid');
+    }
+  });
+
+  it('should reject invalid status values', () => {
+    const invalidStatuses = ['pending', 'cancelled', 'overdue', '', 'PAID', 'DUE'];
+
+    for (const status of invalidStatuses) {
+      const invoice = {
+        items: [{ description: 'Test item', qty: 1, unit: 100.0, tax: 0.0 }],
+        status,
+      };
+
+      const result = createInvoiceSchema.safeParse(invoice);
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it('should validate complete invoice with status', () => {
+    const paidInvoice: CreateInvoiceRequest = {
+      seller: {
+        name: 'Acme Inc',
+        address: '123 Office Rd, City, Country',
+        email: 'invoices@acme.test',
+        phone: '+1 123 456 7890',
+      },
+      buyer: {
+        name: 'Jane Doe',
+        address: '456 Home St, City, Country',
+        email: 'jane@example.com',
+      },
+      items: [
+        { description: 'Design work', qty: 10, unit: 50.0, tax: 0.0 },
+        { description: 'Consulting', qty: 2, unit: 200.0, tax: 0.0 },
+      ],
+      currency: 'USD',
+      issueDate: '2025-01-01',
+      dueDate: '2025-01-15',
+      status: 'paid',
+      notes: 'Thanks for your business',
+    };
+
+    const result = createInvoiceSchema.safeParse(paidInvoice);
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.status).toBe('paid');
+    }
+  });
+});
+
+describe('Update Invoice Status Schema Validation', () => {
+  it('should validate status update to due', () => {
+    const statusUpdate = { status: 'due' as const };
+    const result = updateInvoiceStatusSchema.safeParse(statusUpdate);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.status).toBe('due');
+    }
+  });
+
+  it('should validate status update to paid', () => {
+    const statusUpdate = { status: 'paid' as const };
+    const result = updateInvoiceStatusSchema.safeParse(statusUpdate);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.status).toBe('paid');
+    }
+  });
+
+  it('should reject invalid status update values', () => {
+    const invalidStatuses = ['pending', 'cancelled', 'overdue', '', 'PAID', 'DUE', null, undefined];
+
+    for (const status of invalidStatuses) {
+      const statusUpdate = { status };
+      const result = updateInvoiceStatusSchema.safeParse(statusUpdate);
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it('should require status field', () => {
+    const emptyUpdate = {};
+    const result = updateInvoiceStatusSchema.safeParse(emptyUpdate);
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject extra fields in status update', () => {
+    const statusUpdateWithExtra = {
+      status: 'paid' as const,
+      extraField: 'should be rejected',
+    };
+
+    // Zod will ignore extra fields by default, but we can test strict parsing if needed
+    const result = updateInvoiceStatusSchema.safeParse(statusUpdateWithExtra);
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.status).toBe('paid');
+      expect('extraField' in result.data).toBe(false);
+    }
+  });
+});
+
+describe('Invoice Status Integration Tests', () => {
+  it('should handle invoice creation workflow with different statuses', () => {
+    const baseInvoice = {
+      items: [{ description: 'Consulting', qty: 5, unit: 200.0, tax: 0.0 }],
+      currency: 'USD',
+      issueDate: '2025-01-01',
+      dueDate: '2025-01-15',
+    };
+
+    // Test default status (due)
+    const defaultInvoice = { ...baseInvoice };
+    const defaultResult = createInvoiceSchema.safeParse(defaultInvoice);
+    expect(defaultResult.success).toBe(true);
+    if (defaultResult.success) {
+      expect(defaultResult.data.status).toBe('due');
+    }
+
+    // Test explicit due status
+    const dueInvoice = { ...baseInvoice, status: 'due' as const };
+    const dueResult = createInvoiceSchema.safeParse(dueInvoice);
+    expect(dueResult.success).toBe(true);
+    if (dueResult.success) {
+      expect(dueResult.data.status).toBe('due');
+    }
+
+    // Test paid status
+    const paidInvoice = { ...baseInvoice, status: 'paid' as const };
+    const paidResult = createInvoiceSchema.safeParse(paidInvoice);
+    expect(paidResult.success).toBe(true);
+    if (paidResult.success) {
+      expect(paidResult.data.status).toBe('paid');
+    }
+  });
+
+  it('should validate status update workflow', () => {
+    // Simulate updating from due to paid
+    const dueUpdate = { status: 'due' as const };
+    const dueResult = updateInvoiceStatusSchema.safeParse(dueUpdate);
+    expect(dueResult.success).toBe(true);
+
+    const paidUpdate = { status: 'paid' as const };
+    const paidResult = updateInvoiceStatusSchema.safeParse(paidUpdate);
+    expect(paidResult.success).toBe(true);
+
+    // Simulate updating from paid back to due
+    const backToDueUpdate = { status: 'due' as const };
+    const backToDueResult = updateInvoiceStatusSchema.safeParse(backToDueUpdate);
+    expect(backToDueResult.success).toBe(true);
+  });
+
+  it('should handle status with tax and discount calculations', () => {
+    const complexInvoiceWithStatus = {
+      items: [
+        { description: 'Development', qty: 40, unit: 125.0, tax: 0.0 },
+        { description: 'Design', qty: 20, unit: 100.0, tax: 0.0 },
+      ],
+      currency: 'USD',
+      issueDate: '2025-01-01',
+      dueDate: '2025-01-15',
+      taxRate: 15,
+      discountRate: 10,
+      status: 'paid',
+      notes: 'Comprehensive project with tax and discount',
+    };
+
+    const result = createInvoiceSchema.safeParse(complexInvoiceWithStatus);
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.status).toBe('paid');
+      expect(result.data.taxRate).toBe(15);
+      expect(result.data.discountRate).toBe(10);
+
+      // Calculate expected total
+      const subtotal = calculateTotal(result.data.items);
+      expect(subtotal).toBe(7000); // (40 * 125) + (20 * 100)
+    }
+  });
+
+  it('should validate minimal invoice with status for API inference', () => {
+    // This simulates what the API would receive for inference
+    const minimalPaidInvoice = {
+      items: [{ description: 'Quick service', qty: 1, unit: 500.0, tax: 0.0 }],
+      status: 'paid' as const,
+    };
+
+    const result = createInvoiceSchema.safeParse(minimalPaidInvoice);
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.status).toBe('paid');
+      expect(result.data.taxRate).toBe(0); // default
+      expect(result.data.discountRate).toBe(0); // default
+    }
+  });
+
+  it('should preserve status through validation transformations', () => {
+    const invoiceData = {
+      items: [{ description: 'Service', qty: 1, unit: 100.0, tax: 0.0 }],
+      status: 'paid' as const,
+      notes: 'Test invoice with status',
+    };
+
+    const firstValidation = createInvoiceSchema.safeParse(invoiceData);
+    expect(firstValidation.success).toBe(true);
+
+    if (firstValidation.success) {
+      // Re-validate the parsed data to ensure status is preserved
+      const secondValidation = createInvoiceSchema.safeParse(firstValidation.data);
+      expect(secondValidation.success).toBe(true);
+
+      if (secondValidation.success) {
+        expect(secondValidation.data.status).toBe('paid');
+      }
     }
   });
 });

@@ -1,7 +1,7 @@
 import type { CloudflareEnv } from '@/types';
 import { getAuthContext, requireAuth } from '@/utils/auth';
 import { InvoicePDFGenerator } from '@/utils/pdf';
-import { createInvoiceSchema, paginationSchema } from '@/utils/schemas';
+import { createInvoiceSchema, paginationSchema, updateInvoiceStatusSchema } from '@/utils/schemas';
 import { FolderStorage, InvoiceStorage } from '@/utils/storage';
 import { Hono } from 'hono';
 
@@ -150,6 +150,46 @@ invoiceRoutes.get('/', requireAuth(), async (c) => {
     return c.json(result);
   } catch (error) {
     console.error('Error listing invoices:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+invoiceRoutes.patch('/:id/status', requireAuth(), async (c) => {
+  try {
+    const { userId } = getAuthContext(c);
+    const invoiceId = c.req.param('id');
+    const body = await c.req.json();
+
+    const validationResult = updateInvoiceStatusSchema.safeParse(body);
+    if (!validationResult.success) {
+      return c.json(
+        {
+          error: 'Validation failed',
+          details: validationResult.error.issues,
+        },
+        400
+      );
+    }
+
+    const invoiceStorage = new InvoiceStorage(c.env.INVOICE_KV);
+    const metadata = await invoiceStorage.getInvoiceMetadata(invoiceId);
+
+    if (!metadata) {
+      return c.json({ error: 'Invoice not found' }, 404);
+    }
+
+    if (metadata.userId !== userId) {
+      return c.json({ error: 'Access denied' }, 403);
+    }
+
+    const updatedMetadata = await invoiceStorage.updateInvoiceStatus(
+      invoiceId,
+      validationResult.data.status
+    );
+
+    return c.json(updatedMetadata);
+  } catch (error) {
+    console.error('Error updating invoice status:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 });

@@ -52,6 +52,7 @@ export interface CreateInvoiceRequest {
   taxRate?: number;
   discountRate?: number;
   notes?: string;
+  status?: 'due' | 'paid';
 }
 
 export interface InvoiceMetadata {
@@ -65,6 +66,7 @@ export interface InvoiceMetadata {
   currency: string;
   issueDate: string;
   dueDate: string;
+  status: 'due' | 'paid';
   createdAt: string;
 }
 

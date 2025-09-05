@@ -169,6 +169,7 @@ export class InvoiceStorage {
       currency: request.currency,
       issueDate: request.issueDate,
       dueDate: request.dueDate,
+      status: request.status || 'due',
       createdAt: new Date().toISOString(),
     };
 
@@ -281,5 +282,31 @@ export class InvoiceStorage {
         invoice.seller.toLowerCase().includes(lowerQuery) ||
         invoice.id.toLowerCase().includes(lowerQuery)
     );
+  }
+
+  async updateInvoiceStatus(
+    invoiceId: string,
+    status: 'due' | 'paid'
+  ): Promise<InvoiceMetadata | null> {
+    const data = await this.getInvoiceData(invoiceId);
+    if (!data) return null;
+
+    // Update metadata
+    const updatedMetadata = {
+      ...data.metadata,
+      status,
+    };
+
+    // Update storage data
+    const updatedStorageData = {
+      ...data,
+      metadata: updatedMetadata,
+    };
+
+    // Save both full data and metadata
+    await this.kv.put(`invoice:${invoiceId}`, JSON.stringify(updatedStorageData));
+    await this.kv.put(`invoice:meta:${invoiceId}`, JSON.stringify(updatedMetadata));
+
+    return updatedMetadata;
   }
 }

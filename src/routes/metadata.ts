@@ -12,9 +12,12 @@ metadataRoutes.get('/stats', requireAuth(), async (c) => {
     const invoiceStorage = new InvoiceStorage(c.env.INVOICE_KV);
     const result = await invoiceStorage.listInvoicesByUser(userId, 1000);
 
+    const paidInvoices = result.invoices.filter((invoice) => invoice.status === 'paid');
+
     const totalInvoices = result.invoices.length;
-    const totalRevenue = result.invoices.reduce((sum, invoice) => sum + invoice.total, 0);
-    const currencyBreakdown = result.invoices.reduce(
+    const totalPaidInvoices = paidInvoices.length;
+    const totalRevenue = paidInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
+    const currencyBreakdown = paidInvoices.reduce(
       (acc, invoice) => {
         acc[invoice.currency] = (acc[invoice.currency] || 0) + invoice.total;
         return acc;
@@ -24,6 +27,7 @@ metadataRoutes.get('/stats', requireAuth(), async (c) => {
 
     return c.json({
       totalInvoices,
+      totalPaidInvoices,
       totalRevenue,
       currencyBreakdown,
       lastUpdated: new Date().toISOString(),
