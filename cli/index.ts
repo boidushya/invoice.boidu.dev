@@ -254,7 +254,7 @@ async function checkForUpdates(): Promise<{
   }
 }
 async function performSelfUpdate(): Promise<void> {
-  const spinner = ora('Updating CLI...').start();
+  const spinner = ora('Updating...').start();
 
   try {
     // Download and run the install script
@@ -285,7 +285,7 @@ async function performSelfUpdate(): Promise<void> {
       });
     });
 
-    spinner.succeed('CLI updated successfully! 🎉');
+    spinner.succeed('Updated successfully! 🎉');
     console.log('');
     console.log(
       chalk.yellow(
@@ -901,7 +901,7 @@ program
 // Self-update command
 program
   .command('self-update')
-  .description('🔄 Update CLI to latest version')
+  .description('🔄 Update to latest version')
   .action(async () => {
     try {
       console.log(chalk.blue.bold('🔄 Self-Update'));
@@ -951,7 +951,7 @@ function help() {
   console.log(`   ${chalk.cyan('invoice paid <id>')}          Mark <id> as paid`);
   console.log(`   ${chalk.cyan('invoice get <id>')}           Download Invoice PDF for <id>`);
   console.log(`   ${chalk.cyan('invoice stats')}              Check revenue`);
-  console.log(`   ${chalk.cyan('invoice self-update')}        Update CLI`);
+  console.log(`   ${chalk.cyan('invoice self-update')}        Update to latest version`);
   console.log('');
   console.log(chalk.yellow.bold('⚡ Power User Tips:'));
   console.log('');

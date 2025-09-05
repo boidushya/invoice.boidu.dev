@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Invoice CLI Global Installer
+# Invoice Global Installer
 # Usage: curl -sSL https://invoice.boidu.dev/install.sh | bash
 
 set -e
@@ -24,7 +24,7 @@ BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/inde
 CLI_NAME="invoice"
 
 main() {
-    echo -e "${BLUE}⚡ Invoice CLI Global Installer${NC}"
+    echo -e "${BLUE}⚡ Invoice Global Installer${NC}"
     echo "====================================="
     echo ""
 
@@ -147,7 +147,7 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo "  - curl or wget"
     echo "  - Write access to installation directory"
     echo ""
-    echo "The CLI will be installed to:"
+    echo "The tool will be installed to:"
     echo "  - \$(npm config get prefix)/bin/invoice (if npm is available)"
     echo "  - /usr/local/bin/invoice (fallback)"
     exit 0
