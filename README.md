@@ -210,7 +210,7 @@ curl -X POST http://localhost:8787/invoices \
   --output invoice.pdf
 
 # Run automated tests
-./test-api.sh
+pnpm test
 ```
 
 ## License
