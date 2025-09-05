@@ -96,7 +96,7 @@ jobs:
           
           # Create release with the CLI binary
           gh release create "$VERSION" \
-            --title "Release $VERSION" \
+            --title "$VERSION" \
             --notes "Automated release for version $VERSION" \
             --latest \
             dist-cli/index.js
