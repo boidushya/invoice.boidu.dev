@@ -253,7 +253,6 @@ async function checkForUpdates(): Promise<{
     };
   }
 }
-
 async function performSelfUpdate(): Promise<void> {
   const spinner = ora('Updating CLI...').start();
 
@@ -410,7 +409,7 @@ program
   .command('setup')
   .description('🔧 One-time setup')
   .action(async () => {
-    console.log(chalk.blue.bold('⚡ Invoice CLI Setup'));
+    console.log(chalk.blue.bold('⚡ Invoice Setup'));
     console.log('');
 
     const { name, email, companyName, companyAddress } = await inquirer.prompt([
@@ -944,14 +943,13 @@ program
     }
   });
 
-// Enhanced help
-program.on('--help', () => {
-  console.log('');
-  console.log(chalk.blue.bold('🚀 Common Workflow:'));
+function help() {
+  console.log(chalk.blue.bold('⏳ Common Workflow:'));
   console.log('');
   console.log(`  ${chalk.cyan('invoice setup')}              First-time setup`);
   console.log(`  ${chalk.cyan('invoice new')}                Create invoice`);
-  console.log(`  ${chalk.cyan('invoice paid INV-XXX-001')}   Mark as paid`);
+  console.log(`  ${chalk.cyan('invoice paid <id>')}          Mark <id> as paid`);
+  console.log(`  ${chalk.cyan('invoice get <id>')}           Download Invoice PDF for <id>`);
   console.log(`  ${chalk.cyan('invoice stats')}              Check revenue`);
   console.log(`  ${chalk.cyan('invoice self-update')}        Update CLI`);
   console.log('');
@@ -963,11 +961,17 @@ program.on('--help', () => {
   );
   console.log(`  ${chalk.gray('invoice config --due-days 15')} ${chalk.gray('# Change defaults')}`);
   console.log('');
+}
+
+// Enhanced help
+program.on('--help', () => {
+  console.log('');
+  help();
 });
 
 // Handle no arguments - show smart welcome
-if (process.argv.length === 2) {
-  console.log(chalk.blue.bold('⚡ Invoice CLI'));
+function showWelcomeScreen() {
+  console.log(chalk.blue.bold('⚡ Invoice'));
   console.log('');
 
   const hasApiKey = config.get('apiKey');
@@ -980,10 +984,7 @@ if (process.argv.length === 2) {
     console.log('🚀 Ready to create your first invoice?');
     console.log(chalk.cyan('  invoice new'), '- Create invoice (adds client automatically)');
   } else {
-    console.log('💼 Ready to invoice!');
-    console.log(chalk.cyan('  invoice new'), '- Create new invoice');
-    console.log(chalk.cyan('  invoice list'), '- View recent invoices');
-    console.log(chalk.cyan('  invoice stats'), '- Check your revenue');
+    help();
   }
 
   console.log('');
@@ -991,35 +992,7 @@ if (process.argv.length === 2) {
   process.exit(0);
 }
 
-// Check for updates when CLI runs (but don't block execution)
-async function checkAndNotifyUpdates() {
-  try {
-    const { hasUpdate, currentVersion, latestVersion } = await checkForUpdates();
-
-    if (hasUpdate) {
-      console.log('');
-      console.log(
-        chalk.yellow('📦 Update available!'),
-        chalk.gray(`v${currentVersion} → v${latestVersion}`)
-      );
-      console.log(chalk.cyan('Run:'), chalk.bold('invoice self-update'));
-      console.log('');
-    }
-  } catch {
-    // Silently ignore update check failures
-  }
+if (process.argv.length === 2) {
+  showWelcomeScreen();
 }
-
-// Only check for updates if this is not a help command or version command
-const isHelpOrVersion =
-  process.argv.includes('--help') ||
-  process.argv.includes('-h') ||
-  process.argv.includes('--version') ||
-  process.argv.includes('-V');
-
-if (!isHelpOrVersion && process.argv.length > 2) {
-  // Check for updates asynchronously (don't wait for it)
-  checkAndNotifyUpdates();
-}
-
 program.parse();
