@@ -18,7 +18,7 @@ print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Configuration
-VERSION=1.0.6
+VERSION=1.0.7
 GITHUB_REPO="boidushya/invoice.boidu.dev"
 BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/index.js"
 CLI_NAME="invoice"
@@ -35,7 +35,7 @@ main() {
         exit 1
     fi
 
-    NODE_VERSION=1.0.6
+    NODE_VERSION=1.0.7
     if [ "$NODE_VERSION" -lt 18 ]; then
         print_error "Node.js version $NODE_VERSION is not supported."
         echo "Please upgrade to Node.js 18 or higher."
@@ -104,7 +104,7 @@ main() {
         
         # Test if command is available in PATH
         if command -v "$CLI_NAME" &> /dev/null; then
-            VERSION=1.0.6
+            VERSION=1.0.7
             print_success "Installation complete! Version: $VERSION"
         else
             print_warning "Installed but $INSTALL_DIR is not in your PATH"
