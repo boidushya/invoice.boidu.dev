@@ -1,8 +1,10 @@
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import type { CloudflareEnv } from '@/types';
+import { folderRoutes } from '@/routes/folders';
 import { invoiceRoutes } from '@/routes/invoices';
 import { metadataRoutes } from '@/routes/metadata';
+import { userRoutes } from '@/routes/users';
+import type { CloudflareEnv } from '@/types';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 
 const app = new Hono<{ Bindings: CloudflareEnv }>();
 
@@ -25,6 +27,8 @@ app.get('/', (c) => {
 });
 
 // API routes
+app.route('/users', userRoutes);
+app.route('/folders', folderRoutes);
 app.route('/invoices', invoiceRoutes);
 app.route('/metadata', metadataRoutes);
 

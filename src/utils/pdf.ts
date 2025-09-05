@@ -1,4 +1,4 @@
-import type { CloudflareEnv, CreateInvoiceRequest } from '@/types';
+import type { CloudflareEnv, CreateInvoiceRequest, FontType } from '@/types';
 import { getAssetUrl } from '@/utils/url';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, type PDFFont, StandardFonts, rgb } from 'pdf-lib';
@@ -6,9 +6,9 @@ import { PDFDocument, type PDFFont, StandardFonts, rgb } from 'pdf-lib';
 export class InvoicePDFGenerator {
   constructor(private env: CloudflareEnv) {}
 
-  private async getGeistMonoFont(): Promise<ArrayBuffer> {
+  private async getGeistMonoFont(variant: FontType = 'regular'): Promise<ArrayBuffer> {
     try {
-      const fontUrl = getAssetUrl('/fonts/GeistMono.ttf', this.env);
+      const fontUrl = getAssetUrl(`/fonts/GeistMono-${variant}.ttf`, this.env);
       const fontResponse = await this.env.ASSETS.fetch(fontUrl);
       if (fontResponse.ok) {
         return await fontResponse.arrayBuffer();
@@ -17,6 +17,16 @@ export class InvoicePDFGenerator {
       console.log('Font loading failed, using fallback:', _error);
     }
     return new ArrayBuffer(0);
+  }
+
+  private async getFont(pdfDoc: PDFDocument, variant: FontType = 'regular'): Promise<PDFFont> {
+    const fontBytes = await this.getGeistMonoFont(variant);
+    pdfDoc.registerFontkit(fontkit);
+    if (fontBytes.byteLength > 0) {
+      return pdfDoc.embedFont(fontBytes);
+    }
+    // Fallback to standard font if custom font fails to load
+    return pdfDoc.embedFont(StandardFonts.Helvetica);
   }
 
   private wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] {
@@ -47,7 +57,7 @@ export class InvoicePDFGenerator {
     return lines;
   }
 
-  async generateInvoicePDF(request: CreateInvoiceRequest, invoiceId: number): Promise<Uint8Array> {
+  async generateInvoicePDF(request: CreateInvoiceRequest, invoiceId: string): Promise<Uint8Array> {
     const pdfDoc = await PDFDocument.create();
     pdfDoc.registerFontkit(fontkit);
 
@@ -55,17 +65,9 @@ export class InvoicePDFGenerator {
     const { width, height } = page.getSize();
 
     // Load font
-    let font: PDFFont;
-    try {
-      const fontBytes = await this.getGeistMonoFont();
-      if (fontBytes.byteLength > 0) {
-        font = await pdfDoc.embedFont(fontBytes);
-      } else {
-        font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      }
-    } catch (_error) {
-      font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    }
+    const font = await this.getFont(pdfDoc, 'regular');
+    const fontMedium = await this.getFont(pdfDoc, 'medium');
+    const fontSemibold = await this.getFont(pdfDoc, 'semibold');
 
     // Design constants
     const margin = 40;
@@ -76,9 +78,9 @@ export class InvoicePDFGenerator {
     const labelFontSize = 9;
 
     // Improved color hierarchy - more distinct levels
-    const primary = rgb(0, 0, 0); // Main content - pure black
-    const secondary = rgb(0.15, 0.15, 0.15); // Headers and labels - very dark gray
-    const tertiary = rgb(0.4, 0.4, 0.4); // Secondary info - medium gray
+    const primary = rgb(0.2, 0.2, 0.2); // Main content - very dark gray
+    const secondary = rgb(0.3, 0.3, 0.3); // Headers and labels - dark gray
+    const tertiary = rgb(0.5, 0.5, 0.5); // Secondary info - medium gray
     const quaternary = rgb(0.6, 0.6, 0.6); // Subtle info - lighter gray
     const accent = rgb(0.85, 0.85, 0.85); // Borders and lines - light gray
 
@@ -96,17 +98,17 @@ export class InvoicePDFGenerator {
     yPosition -= 4;
 
     // Header section
-    page.drawText('INVOICE', {
+    page.drawText('Invoice', {
       x: margin,
       y: yPosition - headerFontSize / 2,
       size: headerFontSize,
-      font,
+      font: fontSemibold,
       color: primary,
     });
 
     page.drawText(`#${invoiceId}`, {
       x: width - margin - font.widthOfTextAtSize(`#${invoiceId}`, subHeaderFontSize),
-      y: yPosition - subHeaderFontSize / 2,
+      y: yPosition - headerFontSize / 2,
       size: subHeaderFontSize,
       font,
       color: quaternary,
@@ -121,7 +123,7 @@ export class InvoicePDFGenerator {
       color: quaternary,
     });
 
-    yPosition -= 36;
+    yPosition -= 56;
 
     // Company information section
     const leftColumn = margin;
@@ -150,13 +152,13 @@ export class InvoicePDFGenerator {
       sellerLines.push(request.seller.phone);
     }
 
-    for (const line of sellerLines) {
+    for (const [index, line] of sellerLines.entries()) {
       page.drawText(line, {
         x: leftColumn,
         y: yPosition,
         size: fontSize,
-        font,
-        color: primary,
+        font: index === 0 ? fontSemibold : fontMedium,
+        color: index === 0 ? primary : secondary,
       });
       yPosition -= lineHeight;
     }
@@ -187,13 +189,13 @@ export class InvoicePDFGenerator {
 
     buyerLines.push(request.buyer.email);
 
-    for (const line of buyerLines) {
+    for (const [index, line] of buyerLines.entries()) {
       page.drawText(line, {
         x: rightColumn,
         y: yPosition,
         size: fontSize,
-        font,
-        color: primary,
+        font: index === 0 ? fontSemibold : fontMedium,
+        color: index === 0 ? primary : secondary,
       });
       yPosition -= lineHeight;
     }
@@ -214,8 +216,8 @@ export class InvoicePDFGenerator {
       x: leftColumn + font.widthOfTextAtSize('Issue Date: ', fontSize),
       y: yPosition,
       size: fontSize,
-      font,
-      color: secondary,
+      font: fontMedium,
+      color: primary,
     });
 
     page.drawText('Due Date: ', {
@@ -230,11 +232,11 @@ export class InvoicePDFGenerator {
       x: rightColumn + font.widthOfTextAtSize('Due Date: ', fontSize),
       y: yPosition,
       size: fontSize,
-      font,
-      color: secondary,
+      font: fontMedium,
+      color: primary,
     });
 
-    yPosition -= 50;
+    yPosition -= 70;
 
     // Items table - properly aligned
     const tableStartY = yPosition;
@@ -265,7 +267,8 @@ export class InvoicePDFGenerator {
     });
 
     page.drawText('Qty', {
-      x: colPositions.qty + colWidths.qty / 2 - font.widthOfTextAtSize('Qty', labelFontSize) / 2,
+      x:
+        colPositions.qty + colWidths.qty / 2 - font.widthOfTextAtSize('Qty', labelFontSize) / 2 - 8,
       y: tableStartY,
       size: labelFontSize,
       font,
@@ -273,10 +276,7 @@ export class InvoicePDFGenerator {
     });
 
     page.drawText('Unit Price', {
-      x:
-        colPositions.unit +
-        colWidths.unit / 2 -
-        font.widthOfTextAtSize('Unit Price', labelFontSize) / 2,
+      x: colPositions.unit + colWidths.unit - font.widthOfTextAtSize('Unit Price', labelFontSize),
       y: tableStartY,
       size: labelFontSize,
       font,
@@ -284,10 +284,7 @@ export class InvoicePDFGenerator {
     });
 
     page.drawText('Total', {
-      x:
-        colPositions.total +
-        colWidths.total / 2 -
-        font.widthOfTextAtSize('Total', labelFontSize) / 2,
+      x: colPositions.total + colWidths.total - font.widthOfTextAtSize('Total', labelFontSize),
       y: tableStartY,
       size: labelFontSize,
       font,
@@ -326,7 +323,7 @@ export class InvoicePDFGenerator {
           x: colPositions.description,
           y: currentY - i * lineHeight,
           size: fontSize,
-          font,
+          font: fontMedium,
           color: primary,
         });
       }
@@ -338,10 +335,10 @@ export class InvoicePDFGenerator {
       const qtyText = item.qty.toString();
       const qtyWidth = font.widthOfTextAtSize(qtyText, fontSize);
       page.drawText(qtyText, {
-        x: colPositions.qty + colWidths.qty / 2 - qtyWidth / 2,
+        x: colPositions.qty + colWidths.qty / 2 - qtyWidth / 2 - 8,
         y: numberY,
         size: fontSize,
-        font,
+        font: fontMedium,
         color: primary,
       });
 
@@ -349,10 +346,10 @@ export class InvoicePDFGenerator {
       const unitText = `${request.currency} ${item.unit.toFixed(2)}`;
       const unitWidth = font.widthOfTextAtSize(unitText, fontSize);
       page.drawText(unitText, {
-        x: colPositions.unit + colWidths.unit - unitWidth - 5,
+        x: colPositions.unit + colWidths.unit - unitWidth,
         y: numberY,
         size: fontSize,
-        font,
+        font: fontMedium,
         color: primary,
       });
 
@@ -360,10 +357,10 @@ export class InvoicePDFGenerator {
       const totalText = `${request.currency} ${itemTotal.toFixed(2)}`;
       const totalWidth = font.widthOfTextAtSize(totalText, fontSize);
       page.drawText(totalText, {
-        x: colPositions.total + colWidths.total - totalWidth - 5,
+        x: colPositions.total + colWidths.total - totalWidth,
         y: numberY,
         size: fontSize,
-        font,
+        font: fontMedium,
         color: primary,
       });
 
@@ -371,45 +368,141 @@ export class InvoicePDFGenerator {
       currentY -= descriptionLines.length * lineHeight + 4;
     }
 
-    // Total section
-    currentY -= 0;
+    // Total section - boxed with breakdown
+    currentY -= 30;
 
-    // Line above total
+    // Calculate box dimensions for total section
+    const totalBoxWidth = 200;
+    const totalBoxPadding = 16;
+    const totalBoxX = width - margin - totalBoxWidth;
+
+    // Calculate totals using actual values from request
+    const subtotal = totalAmount; // Base total from items
+    const taxRate = request.taxRate ?? 0;
+    const discountRate = request.discountRate ?? 0;
+    const taxAmount = subtotal * (taxRate / 100);
+    const discountAmount = subtotal * (discountRate / 100);
+    const finalTotal = subtotal + taxAmount - discountAmount;
+
+    // Calculate box height based on content
+    const totalBoxLineHeight = 18;
+    const totalBoxLines = 4; // Subtotal, Tax, Discount, Total
+    const totalBoxHeight = totalBoxLines * totalBoxLineHeight + totalBoxPadding * 2 + 10;
+
+    // Draw box border (transparent background)
+    page.drawRectangle({
+      x: totalBoxX,
+      y: currentY - totalBoxHeight,
+      width: totalBoxWidth,
+      height: totalBoxHeight + 4,
+      borderColor: accent,
+      borderWidth: 1,
+    });
+
+    let totalBoxY = currentY - totalBoxPadding - 4;
+
+    // Subtotal
+    page.drawText('Subtotal', {
+      x: totalBoxX + totalBoxPadding,
+      y: totalBoxY,
+      size: fontSize,
+      font,
+      color: tertiary,
+    });
+    const subtotalText = `${request.currency} ${subtotal.toFixed(2)}`;
+    page.drawText(subtotalText, {
+      x:
+        totalBoxX +
+        totalBoxWidth -
+        totalBoxPadding -
+        font.widthOfTextAtSize(subtotalText, fontSize),
+      y: totalBoxY,
+      size: fontSize,
+      font: fontMedium,
+      color: primary,
+    });
+    totalBoxY -= totalBoxLineHeight;
+
+    // Tax
+    page.drawText(`Tax (${taxRate}%)`, {
+      x: totalBoxX + totalBoxPadding,
+      y: totalBoxY,
+      size: fontSize,
+      font,
+      color: tertiary,
+    });
+    const taxText = `${request.currency} ${taxAmount.toFixed(2)}`;
+    page.drawText(taxText, {
+      x: totalBoxX + totalBoxWidth - totalBoxPadding - font.widthOfTextAtSize(taxText, fontSize),
+      y: totalBoxY,
+      size: fontSize,
+      font: fontMedium,
+      color: primary,
+    });
+    totalBoxY -= totalBoxLineHeight;
+
+    // Discount
+    page.drawText(`Discount (${discountRate}%)`, {
+      x: totalBoxX + totalBoxPadding,
+      y: totalBoxY,
+      size: fontSize,
+      font,
+      color: tertiary,
+    });
+    const discountText = `-${request.currency} ${discountAmount.toFixed(2)}`;
+    page.drawText(discountText, {
+      x:
+        totalBoxX +
+        totalBoxWidth -
+        totalBoxPadding -
+        font.widthOfTextAtSize(discountText, fontSize),
+      y: totalBoxY,
+      size: fontSize,
+      font: fontMedium,
+      color: primary,
+    });
+    totalBoxY -= totalBoxLineHeight + 6;
+
+    // Line above final total
     page.drawLine({
-      start: { x: colPositions.unit, y: currentY },
-      end: { x: width - margin, y: currentY },
+      start: { x: totalBoxX + totalBoxPadding, y: totalBoxY + 6 },
+      end: { x: totalBoxX + totalBoxWidth - totalBoxPadding, y: totalBoxY + 6 },
       thickness: 1,
       color: accent,
     });
 
-    currentY -= 24;
-
-    // Total
-    page.drawText('TOTAL', {
-      x: colPositions.unit,
-      y: currentY,
+    // Final Total
+    page.drawText('Total', {
+      x: totalBoxX + totalBoxPadding,
+      y: totalBoxY - 18,
       size: subHeaderFontSize,
-      font,
+      font: fontSemibold,
       color: secondary,
     });
-
-    const totalText = `${request.currency} ${totalAmount.toFixed(2)}`;
-    const totalTextWidth = font.widthOfTextAtSize(totalText, subHeaderFontSize);
-    page.drawText(totalText, {
-      x: colPositions.total + colWidths.total - totalTextWidth - 5,
-      y: currentY,
+    const finalTotalText = `${request.currency} ${finalTotal.toFixed(2)}`;
+    page.drawText(finalTotalText, {
+      x:
+        totalBoxX +
+        totalBoxWidth -
+        totalBoxPadding -
+        font.widthOfTextAtSize(finalTotalText, subHeaderFontSize),
+      y: totalBoxY - 18,
       size: subHeaderFontSize,
-      font,
+      font: fontSemibold,
       color: primary,
     });
 
-    // Notes section - boxed and half width
-    if (request.notes) {
-      currentY -= 40;
+    // Store the total box start Y position for notes alignment
+    const totalBoxStartY = currentY;
 
+    // Update currentY to account for the total box
+    currentY -= totalBoxHeight + 20;
+
+    // Notes section - boxed and aligned with total box Y position
+    if (request.notes) {
       // Calculate box dimensions
-      const boxWidth = (width - margin * 2) / 2; // Half width
-      const boxPadding = 12;
+      const boxWidth = (width - margin * 2) * 0.4; // 40% of page width
+      const boxPadding = 16;
       const boxMargin = margin;
 
       // Calculate wrapped text first to determine box height
@@ -418,21 +511,15 @@ export class InvoicePDFGenerator {
       // Calculate dynamic box height based on content
       const headerHeight = labelFontSize + 8;
       const contentHeight = notesLines.length * lineHeight;
-      const boxHeight = headerHeight + contentHeight + boxPadding * 2;
+      const boxHeight = headerHeight + contentHeight + boxPadding * 2 - 4;
 
-      // Draw box background
-      page.drawRectangle({
-        x: boxMargin,
-        y: currentY - boxHeight,
-        width: boxWidth,
-        height: boxHeight,
-        color: rgb(0.99, 0.99, 0.99), // Very light gray background
-      });
+      // Use totalBoxStartY to align with total box
+      const notesBoxY = totalBoxStartY;
 
       // Draw box border
       page.drawRectangle({
         x: boxMargin,
-        y: currentY - boxHeight,
+        y: notesBoxY - boxHeight + 4,
         width: boxWidth,
         height: boxHeight,
         borderColor: accent,
@@ -442,29 +529,53 @@ export class InvoicePDFGenerator {
       // Draw "Notes" label
       page.drawText('Notes', {
         x: boxMargin + boxPadding,
-        y: currentY - boxPadding - labelFontSize,
+        y: notesBoxY - boxPadding - labelFontSize + 6,
         size: labelFontSize,
         font,
         color: tertiary,
       });
 
-      currentY -= 12;
-
       // Draw notes content with proper wrapping
-      let notesY = currentY - boxPadding - headerHeight;
+      let notesY = notesBoxY - boxPadding - headerHeight;
       for (const line of notesLines) {
         page.drawText(line, {
           x: boxMargin + boxPadding,
-          y: notesY,
+          y: notesY - 4,
           size: fontSize,
-          font,
+          font: fontMedium,
           color: primary,
         });
         notesY -= lineHeight;
       }
+    }
 
-      // Update currentY to account for the box
-      currentY -= boxHeight + 10;
+    // Payment instructions - absolutely positioned at bottom
+    const bottomMargin = margin;
+    const paymentY = bottomMargin;
+
+    // Divider line
+    page.drawLine({
+      start: { x: margin, y: paymentY + 4 },
+      end: { x: width - margin, y: paymentY + 4 },
+      thickness: 1,
+      color: accent,
+    });
+
+    // Payment instructions with smaller font size and center alignment
+    const paymentFontSize = 8;
+    const paymentText = `Please make payment by the due date. For questions about this invoice, contact ${request.seller.email}`;
+    const paymentLines = this.wrapText(paymentText, width - margin * 2, font, paymentFontSize);
+
+    let paymentCurrentY = paymentY - 15;
+    for (const line of paymentLines) {
+      page.drawText(line, {
+        x: margin,
+        y: paymentCurrentY,
+        size: paymentFontSize,
+        font,
+        color: tertiary,
+      });
+      paymentCurrentY -= paymentFontSize + 2;
     }
 
     return await pdfDoc.save();

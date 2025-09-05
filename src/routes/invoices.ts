@@ -1,36 +1,96 @@
-import { Hono } from 'hono';
 import type { CloudflareEnv } from '@/types';
-import { InvoiceStorage } from '@/utils/storage';
+import { getAuthContext, requireAuth } from '@/utils/auth';
 import { InvoicePDFGenerator } from '@/utils/pdf';
-import { validateCreateInvoiceRequest } from '@/utils/validators';
-import { validateInvoiceData } from '@/templates/invoice-template';
+import { createInvoiceSchema, paginationSchema } from '@/utils/schemas';
+import { FolderStorage, InvoiceStorage } from '@/utils/storage';
+import { Hono } from 'hono';
 
 export const invoiceRoutes = new Hono<{ Bindings: CloudflareEnv }>();
 
-invoiceRoutes.post('/', async (c) => {
+invoiceRoutes.post('/folders/:folderId', requireAuth(), async (c) => {
   try {
+    const { userId, user } = getAuthContext(c);
+    const folderId = c.req.param('folderId');
     const body = await c.req.json();
 
-    if (!validateCreateInvoiceRequest(body)) {
-      return c.json({ error: 'Invalid invoice data' }, 400);
+    const validationResult = createInvoiceSchema.safeParse(body);
+    if (!validationResult.success) {
+      return c.json(
+        {
+          error: 'Validation failed',
+          details: validationResult.error.issues,
+        },
+        400
+      );
     }
 
-    const validationErrors = validateInvoiceData(body);
-    if (validationErrors.length > 0) {
-      return c.json({ error: 'Validation failed', details: validationErrors }, 400);
+    const folderStorage = new FolderStorage(c.env.INVOICE_KV);
+    const folder = await folderStorage.getFolderById(folderId);
+
+    if (!folder) {
+      return c.json({ error: 'Folder not found' }, 404);
     }
 
-    const storage = new InvoiceStorage(c.env.INVOICE_KV);
+    if (folder.userId !== userId) {
+      return c.json({ error: 'Access denied' }, 403);
+    }
+
+    // Infer seller from user defaults if not provided
+    const seller = validationResult.data.seller || user.defaults.seller;
+
+    // Infer buyer from folder defaults if not provided
+    const buyer = validationResult.data.buyer || folder.defaults.buyer;
+
+    // Infer currency from folder or user defaults, fallback to USD
+    const currency =
+      validationResult.data.currency || folder.defaults.currency || user.defaults.currency || 'USD';
+
+    // Infer issueDate to today if not provided
+    const issueDate = validationResult.data.issueDate || new Date().toISOString().split('T')[0];
+
+    // Infer dueDate to NET15 (15 days from issue date) if not provided
+    let dueDate = validationResult.data.dueDate;
+    if (!dueDate) {
+      const issueDateObj = new Date(issueDate);
+      issueDateObj.setDate(issueDateObj.getDate() + 15);
+      dueDate = issueDateObj.toISOString().split('T')[0];
+    }
+
+    // Validate required fields after inference
+    if (!seller) {
+      return c.json({ error: 'Seller is required and not found in user defaults' }, 400);
+    }
+    if (!buyer) {
+      return c.json({ error: 'Buyer is required and not found in folder defaults' }, 400);
+    }
+
+    const inferredInvoiceData = {
+      ...validationResult.data,
+      seller,
+      buyer,
+      currency,
+      issueDate,
+      dueDate,
+    };
+
+    const invoiceStorage = new InvoiceStorage(c.env.INVOICE_KV);
     const pdfGenerator = new InvoicePDFGenerator(c.env);
 
-    const invoiceId = await storage.getNextInvoiceId();
-    await storage.saveInvoice(invoiceId, body);
-    const pdfBytes = await pdfGenerator.generateInvoicePDF(body, invoiceId);
+    const invoiceNumber = await folderStorage.incrementInvoiceCounter(folderId);
+    const metadata = await invoiceStorage.saveInvoice(
+      userId,
+      folderId,
+      inferredInvoiceData,
+      invoiceNumber,
+      folder.company
+    );
+
+    const pdfBytes = await pdfGenerator.generateInvoicePDF(inferredInvoiceData, metadata.id);
 
     return new Response(pdfBytes, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="invoice-${invoiceId}.pdf"`,
+        'Content-Disposition': `inline; filename="${metadata.id}.pdf"`,
         'Cache-Control': 'no-cache',
       },
     });
@@ -40,20 +100,20 @@ invoiceRoutes.post('/', async (c) => {
   }
 });
 
-invoiceRoutes.get('/:id', async (c) => {
+invoiceRoutes.get('/:id', requireAuth(), async (c) => {
   try {
-    const id = c.req.param('id');
-    const invoiceId = Number.parseInt(id, 10);
+    const { userId } = getAuthContext(c);
+    const invoiceId = c.req.param('id');
 
-    if (Number.isNaN(invoiceId) || invoiceId <= 0) {
-      return c.json({ error: 'Invalid invoice ID' }, 400);
-    }
-
-    const storage = new InvoiceStorage(c.env.INVOICE_KV);
-    const metadata = await storage.getInvoiceMetadata(invoiceId);
+    const invoiceStorage = new InvoiceStorage(c.env.INVOICE_KV);
+    const metadata = await invoiceStorage.getInvoiceMetadata(invoiceId);
 
     if (!metadata) {
       return c.json({ error: 'Invoice not found' }, 404);
+    }
+
+    if (metadata.userId !== userId) {
+      return c.json({ error: 'Access denied' }, 403);
     }
 
     return c.json(metadata);
@@ -63,17 +123,29 @@ invoiceRoutes.get('/:id', async (c) => {
   }
 });
 
-invoiceRoutes.get('/', async (c) => {
+invoiceRoutes.get('/', requireAuth(), async (c) => {
   try {
-    const limit = Number.parseInt(c.req.query('limit') || '20', 10);
-    const cursor = c.req.query('cursor');
+    const { userId } = getAuthContext(c);
 
-    if (limit < 1 || limit > 100) {
-      return c.json({ error: 'Limit must be between 1 and 100' }, 400);
+    const queryParams = {
+      limit: c.req.query('limit'),
+      cursor: c.req.query('cursor'),
+    };
+
+    const validationResult = paginationSchema.safeParse(queryParams);
+    if (!validationResult.success) {
+      return c.json(
+        {
+          error: 'Validation failed',
+          details: validationResult.error.issues,
+        },
+        400
+      );
     }
 
-    const storage = new InvoiceStorage(c.env.INVOICE_KV);
-    const result = await storage.listInvoices(limit, cursor);
+    const { limit, cursor } = validationResult.data;
+    const invoiceStorage = new InvoiceStorage(c.env.INVOICE_KV);
+    const result = await invoiceStorage.listInvoicesByUser(userId, limit, cursor);
 
     return c.json(result);
   } catch (error) {

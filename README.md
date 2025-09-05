@@ -1,6 +1,6 @@
 # Invoice API
 
-A production-ready Cloudflare-hosted Invoice API built with Hono, TypeScript, and Biome. Generates clean, minimal invoices as selectable-text PDFs using the embedded Geist Mono variable font.
+A production-ready Cloudflare-hosted Invoice API built with Hono, TypeScript, and Biome. Generates clean, minimal invoices as selectable-text PDFs using the embedded Geist Mono variable font with user/folder organization and API key authentication.
 
 ## Features
 
@@ -8,8 +8,10 @@ A production-ready Cloudflare-hosted Invoice API built with Hono, TypeScript, an
 - 📄 **PDF Generation** - Sharp, minimal invoices with selectable text
 - 🔤 **Geist Mono Font** - Embedded variable TTF font for crisp typography
 - 💾 **Cloudflare KV** - Persistent storage for invoice metadata
-- 🛡️ **TypeScript** - Full type safety
+- 🛡️ **TypeScript** - Full type safety with Zod validation
 - 🎨 **Biome** - Fast linting and formatting
+- 🔐 **Authentication** - API key-based authentication
+- 👥 **Multi-User** - User/folder organization with custom invoice IDs
 - 📊 **RESTful API** - Create, retrieve, and list invoices
 
 ## Font Setup
@@ -27,9 +29,82 @@ This font is automatically embedded in generated PDFs, ensuring:
 
 ## API Endpoints
 
-### Create Invoice
+All endpoints require authentication via Bearer token in the Authorization header:
 ```http
-POST /invoices
+Authorization: Bearer your_api_key_here
+```
+
+### User Management
+
+#### Create User
+```http
+POST /users
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "defaults": {
+    "seller": {
+      "name": "Acme Inc",
+      "address": "123 Office Rd, City, Country",
+      "email": "invoices@acme.test",
+      "phone": "+1 123 456 7890"
+    },
+    "currency": "USD",
+    "notes": "Thanks for your business"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "user": { "id": "uuid", "name": "John Doe", "email": "john@example.com", ... },
+  "apiKey": "ak_uuid_randomstring"
+}
+```
+
+#### Get User Profile
+```http
+GET /users/me
+Authorization: Bearer your_api_key
+```
+
+### Folder Management
+
+#### Create Folder
+```http
+POST /folders
+Authorization: Bearer your_api_key
+Content-Type: application/json
+
+{
+  "name": "ACME Project",
+  "company": "ACME",
+  "defaults": {
+    "buyer": {
+      "name": "ACME Corp",
+      "address": "456 Client St, City, Country",
+      "email": "accounting@acme.com"
+    },
+    "currency": "USD"
+  }
+}
+```
+
+#### List Folders
+```http
+GET /folders
+Authorization: Bearer your_api_key
+```
+
+### Invoice Management
+
+#### Create Invoice
+```http
+POST /invoices/folders/{folderId}
+Authorization: Bearer your_api_key
 Content-Type: application/json
 
 {
@@ -55,17 +130,22 @@ Content-Type: application/json
 }
 ```
 
-**Response:** PDF file with `Content-Type: application/pdf`
+**Response:** PDF file with `Content-Type: application/pdf`  
+**Invoice ID Format:** `INV-{userPrefix}-{companyPrefix}-{number}` (e.g., `INV-JOH-ACME-0001`)
 
-### Get Invoice Metadata
+#### Get Invoice Metadata
 ```http
-GET /invoices/1234
+GET /invoices/INV-JOH-ACME-0001
+Authorization: Bearer your_api_key
 ```
 
 **Response:**
 ```json
 {
-  "id": 1234,
+  "id": "INV-JOH-ACME-0001",
+  "userId": "uuid",
+  "folderId": "uuid",
+  "number": 1,
   "buyer": "Jane Doe",
   "seller": "Acme Inc",
   "total": 700,
@@ -76,27 +156,38 @@ GET /invoices/1234
 }
 ```
 
-### List Invoices
+#### List User Invoices
 ```http
 GET /invoices?limit=20&cursor=abc123
+Authorization: Bearer your_api_key
 ```
 
-**Response:**
-```json
-{
-  "invoices": [
-    { "id": 1234, "buyer": "Jane Doe", "total": 700 },
-    { "id": 1235, "buyer": "John Smith", "total": 250 }
-  ],
-  "nextCursor": "def456"
-}
+#### List Folder Invoices
+```http
+GET /folders/{folderId}/invoices?limit=20
+Authorization: Bearer your_api_key
+```
+
+### Metadata & Search
+
+#### Get User Statistics
+```http
+GET /metadata/stats
+Authorization: Bearer your_api_key
+```
+
+#### Search Invoices
+```http
+GET /metadata/search?q=query
+Authorization: Bearer your_api_key
 ```
 
 ### Additional Endpoints
 
-- `GET /metadata/stats` - Get invoice statistics
-- `GET /metadata/search?q=query` - Search invoices
-- `GET /` - Health check
+- `GET /` - Health check (no auth required)
+- `PUT /users/me` - Update user profile
+- `POST /users/api-keys` - Generate new API key
+- `DELETE /users/api-keys/{key}` - Revoke API key
 
 ## Development
 
@@ -161,12 +252,16 @@ src/
 │   └── fonts/
 │       └── GeistMono.ttf # Embedded variable font
 ├── routes/
+│   ├── users.ts          # User management endpoints
+│   ├── folders.ts        # Folder management endpoints
 │   ├── invoices.ts       # Invoice CRUD endpoints
 │   └── metadata.ts       # Metadata and search endpoints
 ├── utils/
+│   ├── auth.ts           # Authentication and API key management
+│   ├── schemas.ts        # Zod validation schemas
+│   ├── storage-v2.ts     # Multi-user KV storage operations
 │   ├── pdf.ts            # PDF generation with font embedding
-│   ├── storage.ts        # Cloudflare KV operations
-│   └── validators.ts     # Input validation
+│   └── validators.ts     # Input validation helpers
 └── templates/
     └── invoice-template.ts # Invoice calculations and formatting
 ```
@@ -203,9 +298,42 @@ src/
 Use the provided test files:
 
 ```bash
-# Test with example data
-curl -X POST http://localhost:8787/invoices \
+# 1. Create a user and get API key
+curl -X POST http://localhost:8787/users \
   -H "Content-Type: application/json" \
+  -d '{
+    "name": "Test User",
+    "email": "test@example.com",
+    "defaults": {
+      "seller": {
+        "name": "Test Company",
+        "address": "123 Test St",
+        "email": "test@company.com"
+      },
+      "currency": "USD"
+    }
+  }'
+
+# 2. Create a folder (use API key from step 1)
+curl -X POST http://localhost:8787/folders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_api_key" \
+  -d '{
+    "name": "Test Project",
+    "company": "ACME",
+    "defaults": {
+      "buyer": {
+        "name": "ACME Corp",
+        "address": "456 Client St",
+        "email": "accounting@acme.com"
+      }
+    }
+  }'
+
+# 3. Create invoice (use folder ID from step 2)
+curl -X POST http://localhost:8787/invoices/folders/{folderId} \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_api_key" \
   -d @test-example.json \
   --output invoice.pdf
 
