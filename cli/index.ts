@@ -6,6 +6,7 @@ import inquirer from 'inquirer';
 import ora from 'ora';
 // @ts-ignore - External module compatibility
 const { default: Conf } = require('conf');
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import fetch from 'node-fetch';
@@ -200,6 +201,105 @@ function formatCurrency(amount: number, currency = 'USD') {
 
 function formatStatus(status: string) {
   return status === 'paid' ? chalk.green('✅ PAID') : chalk.yellow('⏳ DUE');
+}
+
+// Version comparison utility
+function compareVersions(v1: string, v2: string): number {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const part1 = parts1[i] || 0;
+    const part2 = parts2[i] || 0;
+
+    if (part1 < part2) return -1;
+    if (part1 > part2) return 1;
+  }
+
+  return 0;
+}
+
+// Version management
+async function checkForUpdates(): Promise<{
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+}> {
+  try {
+    const currentVersion = packageJson.version;
+
+    // Fetch the install.sh script to get the latest version
+    const response = await fetch('https://invoice.boidu.dev/install.sh');
+    const installScript = await response.text();
+
+    // Extract version from install.sh
+    const versionMatch = installScript.match(/VERSION=([0-9]+\.[0-9]+\.[0-9]+)/);
+    const latestVersion = versionMatch ? versionMatch[1] : currentVersion;
+
+    // Check if latest version is actually newer
+    const hasUpdate = compareVersions(currentVersion, latestVersion) < 0;
+
+    return {
+      hasUpdate,
+      currentVersion,
+      latestVersion,
+    };
+  } catch {
+    // If we can't check for updates, assume no update needed
+    return {
+      hasUpdate: false,
+      currentVersion: packageJson.version,
+      latestVersion: packageJson.version,
+    };
+  }
+}
+
+async function performSelfUpdate(): Promise<void> {
+  const spinner = ora('Updating CLI...').start();
+
+  try {
+    // Download and run the install script
+    const installProcess = spawn(
+      'bash',
+      ['-c', 'curl -sSL https://invoice.boidu.dev/install.sh | bash'],
+      {
+        stdio: 'pipe',
+      }
+    );
+
+    let output = '';
+    installProcess.stdout.on('data', (data: Buffer) => {
+      output += data.toString();
+    });
+
+    installProcess.stderr.on('data', (data: Buffer) => {
+      output += data.toString();
+    });
+
+    await new Promise((resolve, reject) => {
+      installProcess.on('close', (code: number) => {
+        if (code === 0) {
+          resolve(code);
+        } else {
+          reject(new Error(`Update failed with exit code ${code}: ${output}`));
+        }
+      });
+    });
+
+    spinner.succeed('CLI updated successfully! 🎉');
+    console.log('');
+    console.log(
+      chalk.yellow(
+        'Please restart your terminal or run the command again to use the updated version.'
+      )
+    );
+  } catch (error) {
+    spinner.fail('Update failed');
+    console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error');
+    console.log('');
+    console.log(chalk.gray('You can try updating manually:'));
+    console.log(chalk.cyan('curl -sSL https://invoice.boidu.dev/install.sh | bash'));
+  }
 }
 
 // Smart folder selection with caching and nicknames
@@ -799,6 +899,51 @@ program
     }
   });
 
+// Self-update command
+program
+  .command('self-update')
+  .description('🔄 Update CLI to latest version')
+  .action(async () => {
+    try {
+      console.log(chalk.blue.bold('🔄 Self-Update'));
+      console.log('');
+
+      const { hasUpdate, currentVersion, latestVersion } = await checkForUpdates();
+
+      if (!hasUpdate) {
+        console.log(chalk.green('✅ Already up to date!'));
+        console.log(chalk.cyan('Current version:'), currentVersion);
+        return;
+      }
+
+      console.log(chalk.yellow('📦 Update available!'));
+      console.log(chalk.cyan('Current version:'), currentVersion);
+      console.log(chalk.cyan('Latest version:'), latestVersion);
+      console.log('');
+
+      const { confirm } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'confirm',
+          message: 'Update now?',
+          default: true,
+        },
+      ]);
+
+      if (confirm) {
+        await performSelfUpdate();
+        // Exit after successful update to avoid any issues
+        process.exit(0);
+      } else {
+        console.log(chalk.gray('Update cancelled.'));
+        console.log('');
+        console.log(chalk.gray('You can update later with:'), chalk.cyan('invoice self-update'));
+      }
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error');
+    }
+  });
+
 // Enhanced help
 program.on('--help', () => {
   console.log('');
@@ -808,6 +953,7 @@ program.on('--help', () => {
   console.log(`  ${chalk.cyan('invoice new')}                Create invoice`);
   console.log(`  ${chalk.cyan('invoice paid INV-XXX-001')}   Mark as paid`);
   console.log(`  ${chalk.cyan('invoice stats')}              Check revenue`);
+  console.log(`  ${chalk.cyan('invoice self-update')}        Update CLI`);
   console.log('');
   console.log(chalk.blue.bold('⚡ Power User Tips:'));
   console.log('');
@@ -843,6 +989,37 @@ if (process.argv.length === 2) {
   console.log('');
   console.log(chalk.gray('All commands:'), 'invoice --help');
   process.exit(0);
+}
+
+// Check for updates when CLI runs (but don't block execution)
+async function checkAndNotifyUpdates() {
+  try {
+    const { hasUpdate, currentVersion, latestVersion } = await checkForUpdates();
+
+    if (hasUpdate) {
+      console.log('');
+      console.log(
+        chalk.yellow('📦 Update available!'),
+        chalk.gray(`v${currentVersion} → v${latestVersion}`)
+      );
+      console.log(chalk.cyan('Run:'), chalk.bold('invoice self-update'));
+      console.log('');
+    }
+  } catch {
+    // Silently ignore update check failures
+  }
+}
+
+// Only check for updates if this is not a help command or version command
+const isHelpOrVersion =
+  process.argv.includes('--help') ||
+  process.argv.includes('-h') ||
+  process.argv.includes('--version') ||
+  process.argv.includes('-V');
+
+if (!isHelpOrVersion && process.argv.length > 2) {
+  // Check for updates asynchronously (don't wait for it)
+  checkAndNotifyUpdates();
 }
 
 program.parse();

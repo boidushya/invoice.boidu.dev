@@ -76,6 +76,7 @@ Commands:
   stats                      📊 Revenue stats
   clients                    👥 Manage clients
   config [options]           ⚙️ Settings
+  self-update                🔄 Update CLI to latest version
   help [command]             display help for command
 
 🚀 Common Workflow:
@@ -84,6 +85,7 @@ Commands:
   invoice new                Create invoice
   invoice paid INV-XXX-001   Mark as paid
   invoice stats              Check revenue
+  invoice self-update        Update CLI
 
 ⚡ Power User Tips:
 
