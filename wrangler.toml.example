@@ -16,3 +16,6 @@ AUTH_SECRET = "generate-an-auth-secret-here" # replace with a secure value such 
 [assets]
 directory = "./public/"
 binding = "ASSETS"
+
+[observability.logs]
+enabled = true

@@ -18,7 +18,7 @@ print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Configuration
-VERSION=1.0.9
+VERSION=1.0.10
 GITHUB_REPO="boidushya/invoice.boidu.dev"
 BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/index.js"
 CLI_NAME="invoice"
