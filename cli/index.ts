@@ -311,36 +311,37 @@ async function selectFolder(): Promise<string> {
     return await createQuickFolder();
   }
 
-  if (folderEntries.length === 1) {
-    const folder = folderEntries[0][1] as FolderData;
-    console.log(chalk.gray(`Using client: ${folder.name}`));
-    return folder.id;
-  }
-
-  const defaultFolder = config.get('defaultFolder');
-  if (defaultFolder && folders[defaultFolder]) {
-    const folder = folders[defaultFolder] as FolderData;
-    console.log(chalk.gray(`Using default client: ${folder.name}`));
-    return folder.id;
-  }
+  // Always ask user if they want to use existing client or create new one
+  const choices = [
+    ...folderEntries.map(([, folder]) => ({
+      name: `${(folder as FolderData).name} (${(folder as FolderData).company})`,
+      value: (folder as FolderData).id,
+    })),
+    new inquirer.Separator(),
+    {
+      name: 'Create new client',
+      value: '_#_CREATE_NEW_#_',
+    },
+  ];
 
   const { folderId } = await inquirer.prompt([
     {
       type: 'list',
       name: 'folderId',
       message: 'Select client:',
-      choices: folderEntries.map(([, folder]) => ({
-        name: `${(folder as FolderData).name} (${(folder as FolderData).company})`,
-        value: (folder as FolderData).id,
-      })),
+      choices,
     },
   ]);
+
+  if (folderId === '_#_CREATE_NEW_#_') {
+    return await createQuickFolder();
+  }
 
   return folderId;
 }
 
-async function createQuickFolder(): Promise<string> {
-  const { clientName, company, email } = await inquirer.prompt([
+async function createQuickFolder(id?: string): Promise<string> {
+  const { clientName, address, company, email } = await inquirer.prompt([
     {
       type: 'input',
       name: 'clientName',
@@ -353,6 +354,13 @@ async function createQuickFolder(): Promise<string> {
       message: 'Company abbreviation (for invoice IDs):',
       validate: (input: string) => (input.trim() ? true : 'Required'),
       transformer: (input: string) => input.toUpperCase(),
+      default: id,
+    },
+    {
+      type: 'input',
+      name: 'address',
+      message: 'Client address:',
+      validate: (input: string) => (input.trim() ? true : 'Required'),
     },
     {
       type: 'input',
@@ -374,7 +382,7 @@ async function createQuickFolder(): Promise<string> {
     defaults: {
       buyer: {
         name: clientName,
-        address: 'Address on file',
+        address: address !== '' ? address : 'Address on file',
         email: email,
       },
     },
@@ -486,7 +494,7 @@ program
   .command('new')
   .alias('create')
   .description('🚀 Create new invoice (main command)')
-  .option('-c, --client <name>', 'Client nickname (skip selection)')
+  .option('-c, --client <name>', 'Create or use client nickname')
   .option('-a, --amount <amount>', 'Total amount')
   .option('-d, --description <desc>', 'Work description')
   .action(async (options) => {
@@ -505,12 +513,9 @@ program
           folderId = clientFolder.id;
           console.log(chalk.gray(`Using client: ${clientFolder.name}`));
         } else {
-          console.log(chalk.yellow(`Client "${options.client}" not found. Available:`));
-          for (const key of Object.keys(folders)) {
-            console.log(chalk.gray(`  ${key}`));
-          }
+          console.log(chalk.gray(`🔄 Creating new client "${options.client}"`));
           console.log('');
-          folderId = await selectFolder();
+          folderId = await createQuickFolder(options.client);
         }
       } else {
         folderId = await selectFolder();
@@ -841,7 +846,9 @@ program
       }
 
       console.log('');
-      console.log(chalk.gray('💡 Use client nickname: invoice new -c <nickname>'));
+      console.log(chalk.gray.bold('💡 Tip: Create new or use existing client with nickname:'));
+      console.log('');
+      console.log(chalk.gray('   invoice new -c <nickname>'));
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error');
     }
