@@ -25,6 +25,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install
         
+      - name: Setup wrangler.toml
+        run: |
+          cp wrangler.toml.example wrangler.toml
+          sed -i 's/your-kv-namespace-id/${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}/g' wrangler.toml
+          sed -i 's/your-preview-kv-namespace-id/${{ secrets.CLOUDFLARE_KV_PREVIEW_ID }}/g' wrangler.toml
+          sed -i 's/generate-an-auth-secret-here/${{ secrets.AUTH_SECRET }}/g' wrangler.toml
+        
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
         with:
