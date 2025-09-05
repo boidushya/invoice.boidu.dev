@@ -76,22 +76,23 @@ Commands:
   stats                      📊 Revenue stats
   clients                    👥 Manage clients
   config [options]           ⚙️ Settings
-  self-update                🔄 Update CLI to latest version
+  self-update                🔄 Update to latest version
   help [command]             display help for command
 
-🚀 Common Workflow:
+⏳ Common Workflow:
 
   invoice setup              First-time setup
   invoice new                Create invoice
-  invoice paid INV-XXX-001   Mark as paid
+  invoice paid <id>          Mark <id> as paid
+  invoice get <id>           Download Invoice PDF for <id>
   invoice stats              Check revenue
-  invoice self-update        Update CLI
+  invoice self-update        Update to latest version
 
 ⚡ Power User Tips:
 
-  invoice new -c acme -a 1500 -d "Website redesign"
-  invoice clients            # List client nicknames
-  invoice config --due-days 15 # Change defaults
+  invoice new -c acme -a 1500 -d "Website redesign" # Super quick invoice
+  invoice clients                                   # List client nicknames
+  invoice config --due-days 15                      # Change defaults
 ```
 
 ### Manual Installation & Usage
