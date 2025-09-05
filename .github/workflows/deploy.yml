@@ -11,6 +11,20 @@ jobs:
     name: Deploy
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+          
+      - name: Install dependencies
+        run: pnpm install
+        
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
         with:
