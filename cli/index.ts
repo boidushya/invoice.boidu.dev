@@ -946,20 +946,24 @@ program
 function help() {
   console.log(chalk.blue.bold('⏳ Common Workflow:'));
   console.log('');
-  console.log(`  ${chalk.cyan('invoice setup')}              First-time setup`);
-  console.log(`  ${chalk.cyan('invoice new')}                Create invoice`);
-  console.log(`  ${chalk.cyan('invoice paid <id>')}          Mark <id> as paid`);
-  console.log(`  ${chalk.cyan('invoice get <id>')}           Download Invoice PDF for <id>`);
-  console.log(`  ${chalk.cyan('invoice stats')}              Check revenue`);
-  console.log(`  ${chalk.cyan('invoice self-update')}        Update CLI`);
+  console.log(`   ${chalk.cyan('invoice setup')}              First-time setup`);
+  console.log(`   ${chalk.cyan('invoice new')}                Create invoice`);
+  console.log(`   ${chalk.cyan('invoice paid <id>')}          Mark <id> as paid`);
+  console.log(`   ${chalk.cyan('invoice get <id>')}           Download Invoice PDF for <id>`);
+  console.log(`   ${chalk.cyan('invoice stats')}              Check revenue`);
+  console.log(`   ${chalk.cyan('invoice self-update')}        Update CLI`);
   console.log('');
-  console.log(chalk.blue.bold('⚡ Power User Tips:'));
+  console.log(chalk.yellow.bold('⚡ Power User Tips:'));
   console.log('');
-  console.log(`  ${chalk.gray('invoice new -c acme -a 1500 -d "Website redesign"')}`);
   console.log(
-    `  ${chalk.gray('invoice clients')}            ${chalk.gray('# List client nicknames')}`
+    `   ${chalk.white('invoice new -c acme -a 1500 -d "Website redesign"')}\t${chalk.gray('# Super quick invoice')}`
   );
-  console.log(`  ${chalk.gray('invoice config --due-days 15')} ${chalk.gray('# Change defaults')}`);
+  console.log(
+    `   ${chalk.white('invoice clients')}\t\t\t\t\t${chalk.gray('# List client nicknames')}`
+  );
+  console.log(
+    `   ${chalk.white('invoice config --due-days 15')}\t\t\t\t${chalk.gray('# Change defaults')}`
+  );
   console.log('');
 }
 
@@ -973,16 +977,18 @@ program.on('--help', () => {
 function showWelcomeScreen() {
   console.log(chalk.blue.bold('⚡ Invoice'));
   console.log('');
+  console.log(chalk.gray('Ultra-fast invoice creation'));
+  console.log('');
 
   const hasApiKey = config.get('apiKey');
   const hasClients = Object.keys(config.get('folders')).length > 0;
 
   if (!hasApiKey) {
     console.log('👋 First time here?');
-    console.log(chalk.cyan('  invoice setup'), '- One-time account setup');
+    console.log(chalk.cyan('   invoice setup'), '- One-time account setup');
   } else if (!hasClients) {
     console.log('🚀 Ready to create your first invoice?');
-    console.log(chalk.cyan('  invoice new'), '- Create invoice (adds client automatically)');
+    console.log(chalk.cyan('   invoice new'), '- Create invoice (adds client automatically)');
   } else {
     help();
   }
