@@ -314,7 +314,7 @@ async function selectFolder(): Promise<string> {
   // Always ask user if they want to use existing client or create new one
   const choices = [
     ...folderEntries.map(([, folder]) => ({
-      name: `${(folder as FolderData).name} (${(folder as FolderData).company})`,
+      name: `${(folder as FolderData).name} [${(folder as FolderData).company}]`,
       value: (folder as FolderData).id,
     })),
     new inquirer.Separator(),
@@ -909,7 +909,8 @@ program
 program
   .command('self-update')
   .description('🔄 Update to latest version')
-  .action(async () => {
+  .option('-y, --yes', 'Update automatically if available')
+  .action(async (options) => {
     try {
       console.log(chalk.blue.bold('🔄 Self-Update'));
       console.log('');
@@ -927,23 +928,27 @@ program
       console.log(chalk.cyan('Latest version:'), latestVersion);
       console.log('');
 
-      const { confirm } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'confirm',
-          message: 'Update now?',
-          default: true,
-        },
-      ]);
-
-      if (confirm) {
-        await performSelfUpdate();
-        // Exit after successful update to avoid any issues
-        process.exit(0);
+      if (!options.yes) {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: 'Update now?',
+            default: true,
+          },
+        ]);
+        if (confirm) {
+          await performSelfUpdate();
+          // Exit after successful update to avoid any issues
+          process.exit(0);
+        } else {
+          console.log(chalk.gray('Update cancelled.'));
+          console.log('');
+          console.log(chalk.gray('You can update later with:'), chalk.cyan('invoice self-update'));
+        }
       } else {
-        console.log(chalk.gray('Update cancelled.'));
-        console.log('');
-        console.log(chalk.gray('You can update later with:'), chalk.cyan('invoice self-update'));
+        await performSelfUpdate();
+        process.exit(0);
       }
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error');

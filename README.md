@@ -1,6 +1,6 @@
-# Invoice API
+# invoice.boidu.dev
 
-A production-ready Cloudflare-hosted Invoice API built with Hono, TypeScript, and Biome. Generates clean, minimal invoices as selectable-text PDFs using the embedded Geist Mono variable font with user/folder organization and API key authentication. Includes a powerful CLI tool for streamlined invoice creation and management.
+Ultra-fast, Dead simple invoice creation. Built with Hono, hosted on Cloudflare. Generates clean, minimal invoices through API or CLI.
 
 ## Features
 
