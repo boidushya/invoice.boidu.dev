@@ -118,7 +118,11 @@ invoiceRoutes.get('/:id', requireAuth(), async (c) => {
 
     // Generate PDF and return it
     const pdfGenerator = new InvoicePDFGenerator(c.env);
-    const pdfBytes = await pdfGenerator.generateInvoicePDF(invoice.request, invoiceId);
+    const requestData = {
+      ...invoice.request,
+      status: invoice.metadata.status,
+    };
+    const pdfBytes = await pdfGenerator.generateInvoicePDF(requestData, invoiceId);
 
     return new Response(pdfBytes, {
       headers: {
