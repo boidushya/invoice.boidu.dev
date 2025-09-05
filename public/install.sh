@@ -76,7 +76,7 @@ main() {
     fi
 
     # Download the CLI binary
-    print_status "Downloading invoice-cli from GitHub releases..."
+    print_status "Downloading invoice from GitHub releases..."
     
     if command -v curl &> /dev/null; then
         curl -sSL "$BINARY_URL" -o "$CLI_PATH" || {
@@ -100,7 +100,7 @@ main() {
 
     # Verify installation
     if [ -x "$CLI_PATH" ]; then
-        print_success "invoice-cli installed to $CLI_PATH"
+        print_success "invoice installed to $CLI_PATH"
         
         # Test if command is available in PATH
         if command -v "$CLI_NAME" &> /dev/null; then
@@ -135,9 +135,9 @@ main() {
 
 # Handle help
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    echo "Invoice CLI Installer"
+    echo "Invoice Installer"
     echo ""
-    echo "This script downloads and installs invoice-cli globally from GitHub releases."
+    echo "This script downloads and installs invoice globally from GitHub releases."
     echo ""
     echo "Usage:"
     echo "  curl -sSL https://invoice.boidu.dev/install.sh | bash"
@@ -148,8 +148,8 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo "  - Write access to installation directory"
     echo ""
     echo "The CLI will be installed to:"
-    echo "  - \$(npm config get prefix)/bin/invoice-cli (if npm is available)"
-    echo "  - /usr/local/bin/invoice-cli (fallback)"
+    echo "  - \$(npm config get prefix)/bin/invoice (if npm is available)"
+    echo "  - /usr/local/bin/invoice (fallback)"
     exit 0
 fi
 
