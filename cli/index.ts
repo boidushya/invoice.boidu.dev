@@ -9,7 +9,6 @@ const { default: Conf } = require('conf');
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import fetch from 'node-fetch';
 
 // Types
 interface SellerBuyer {
@@ -101,15 +100,20 @@ class InvoiceAPI {
     options: RequestOptions = {}
   ): Promise<ApiResponse<T>> {
     const { method = 'GET', body } = options;
+    const url = `${this.baseUrl}${endpoint}`;
 
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this.apiKey) {
+        headers.Authorization = `Bearer ${this.apiKey}`;
+      }
+
+      const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'invoice/1.0.0',
-          ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
       });
 
@@ -194,13 +198,12 @@ class InvoiceAPI {
     folderId: string,
     clientData: { buyer: SellerBuyer }
   ): Promise<ApiResponse<FolderData>> {
-    // First get the current folder data
     const currentFolder = await this.getFolder(folderId);
+
     if (!currentFolder.success || !currentFolder.data) {
       return { success: false, error: 'Could not fetch current folder data' };
     }
-    
-    // Update just the buyer information while preserving everything else
+
     const updatedFolderData = {
       ...currentFolder.data,
       defaults: {
@@ -208,8 +211,7 @@ class InvoiceAPI {
         buyer: clientData.buyer,
       },
     };
-    
-    // Use the existing PUT endpoint to update the full folder
+
     return this.request<FolderData>(`/folders/${folderId}`, {
       method: 'PUT',
       body: updatedFolderData,
@@ -1222,7 +1224,7 @@ async function updateClientData(nickname: string): Promise<void> {
 
   try {
     const result = await api.updateFolderClient(folder.id, { buyer: updatedBuyer });
-  
+
     if (result.success && result.data) {
       spinner.succeed('Client data updated! ✅');
 
@@ -1252,11 +1254,14 @@ async function updateClientData(nickname: string): Promise<void> {
     }
   } catch (error) {
     spinner.fail('Failed to update client data');
-    console.error(chalk.red('Network Error:'), error instanceof Error ? error.message : 'Unknown error');
+    console.error(
+      chalk.red('Network Error:'),
+      error instanceof Error ? error.message : 'Unknown error'
+    );
     console.log('');
     console.log(chalk.yellow('💡 This might happen if:'));
     console.log(chalk.gray('  • The API server is not running'));
-    console.log(chalk.gray('  • There are network connectivity issues')); 
+    console.log(chalk.gray('  • There are network connectivity issues'));
     console.log(chalk.gray('  • The endpoint has not been deployed yet'));
     console.log('');
     console.log(chalk.cyan('Current API URL:'), config.get('apiUrl'));
@@ -1348,7 +1353,6 @@ program
         ]);
         if (confirm) {
           await performSelfUpdate();
-          // Exit after successful update to avoid any issues
           process.exit(0);
         } else {
           console.log(chalk.gray('Update cancelled.'));
