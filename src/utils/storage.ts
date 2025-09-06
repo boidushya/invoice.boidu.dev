@@ -1,5 +1,6 @@
 import type {
   CloudflareEnv,
+  Contact,
   CreateInvoiceRequest,
   Folder,
   FolderDefaults,
@@ -312,5 +313,49 @@ export class InvoiceStorage {
     await this.kv.put(`invoice:meta:${invoiceId}`, JSON.stringify(updatedMetadata));
 
     return updatedMetadata;
+  }
+
+  async updateInvoiceClientData(
+    invoiceId: string,
+    clientUpdates: { seller?: Contact; buyer?: Contact }
+  ): Promise<InvoiceStorageData | null> {
+    const data = await this.getInvoiceData(invoiceId);
+    if (!data) return null;
+
+    // Update the request data with new client information
+    const updatedRequest = { ...data.request };
+    if (clientUpdates.seller) {
+      updatedRequest.seller = clientUpdates.seller;
+    }
+    if (clientUpdates.buyer) {
+      updatedRequest.buyer = clientUpdates.buyer;
+    }
+
+    // Recalculate total in case tax rates changed
+    const total = updatedRequest.items.reduce((sum, item) => {
+      const subtotal = item.qty * item.unit;
+      const taxAmount = subtotal * (item.tax / 100);
+      return sum + subtotal + taxAmount;
+    }, 0);
+
+    // Update metadata with new client names and total
+    const updatedMetadata = {
+      ...data.metadata,
+      buyer: updatedRequest.buyer.name,
+      seller: updatedRequest.seller.name,
+      total: Math.round(total * 100) / 100,
+    };
+
+    // Update storage data
+    const updatedStorageData = {
+      metadata: updatedMetadata,
+      request: updatedRequest,
+    };
+
+    // Save both full data and metadata
+    await this.kv.put(`invoice:${invoiceId}`, JSON.stringify(updatedStorageData));
+    await this.kv.put(`invoice:meta:${invoiceId}`, JSON.stringify(updatedMetadata));
+
+    return updatedStorageData;
   }
 }

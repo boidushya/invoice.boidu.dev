@@ -1,6 +1,6 @@
 {
   "name": "invoice.boidu.dev",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Cloudflare-hosted Invoice API with Hono and TypeScript",
   "main": "src/index.ts",
   "bin": {
@@ -14,9 +14,10 @@
     "check": "biome check .",
     "test": "vitest run",
     "build": "tsc",
-    "build:cli": "esbuild cli/index.ts --bundle --platform=node --target=node18 --outfile=dist-cli/index.js --minify --format=cjs --external:fsevents --tsconfig=tsconfig.cli.json",
     "wrangler": "wrangler",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+    "build:cli": "esbuild cli/index.ts --bundle --platform=node --target=node18 --outfile=dist-cli/index.js --minify --format=cjs --external:fsevents --tsconfig=tsconfig.cli.json",
+		"typecheck:cli": "tsc --noEmit --project tsconfig.cli.json"
   },
   "dependencies": {
     "@cloudflare/kv-asset-handler": "^0.4.0",

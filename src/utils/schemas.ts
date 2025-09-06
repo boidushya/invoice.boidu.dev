@@ -79,6 +79,19 @@ export const updateInvoiceStatusSchema = z.object({
   status: z.enum(['due', 'paid']),
 });
 
+export const updateClientDataSchema = z
+  .object({
+    seller: contactSchema.optional(),
+    buyer: contactSchema.optional(),
+  })
+  .refine((data) => data.seller || data.buyer, {
+    message: 'At least one of seller or buyer must be provided',
+  });
+
+export const updateFolderClientSchema = z.object({
+  buyer: contactSchema,
+});
+
 export type ContactInput = z.infer<typeof contactSchema>;
 export type InvoiceItemInput = z.infer<typeof invoiceItemSchema>;
 export type UserDefaultsInput = z.infer<typeof userDefaultsSchema>;
@@ -90,3 +103,5 @@ export type AuthHeaderInput = z.infer<typeof authHeaderSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
 export type SearchInput = z.infer<typeof searchSchema>;
 export type UpdateInvoiceStatusInput = z.infer<typeof updateInvoiceStatusSchema>;
+export type UpdateClientDataInput = z.infer<typeof updateClientDataSchema>;
+export type UpdateFolderClientInput = z.infer<typeof updateFolderClientSchema>;

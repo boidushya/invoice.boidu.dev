@@ -1,7 +1,12 @@
 import type { CloudflareEnv } from '@/types';
 import { getAuthContext, requireAuth } from '@/utils/auth';
 import { InvoicePDFGenerator } from '@/utils/pdf';
-import { createInvoiceSchema, paginationSchema, updateInvoiceStatusSchema } from '@/utils/schemas';
+import {
+  createInvoiceSchema,
+  paginationSchema,
+  updateClientDataSchema,
+  updateInvoiceStatusSchema,
+} from '@/utils/schemas';
 import { FolderStorage, InvoiceStorage } from '@/utils/storage';
 import { Hono } from 'hono';
 
@@ -116,6 +121,13 @@ invoiceRoutes.get('/:id', requireAuth(), async (c) => {
       return c.json({ error: 'Access denied' }, 403);
     }
 
+    // Check if client wants JSON data or PDF
+    const accept = c.req.header('Accept');
+    if (accept?.includes('application/json')) {
+      // Return JSON data
+      return c.json(invoice);
+    }
+
     // Generate PDF and return it
     const pdfGenerator = new InvoicePDFGenerator(c.env);
     const requestData = {
@@ -204,6 +216,50 @@ invoiceRoutes.patch('/:id/status', requireAuth(), async (c) => {
     return c.json(updatedMetadata);
   } catch (error) {
     console.error('Error updating invoice status:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+invoiceRoutes.patch('/:id/client', requireAuth(), async (c) => {
+  try {
+    const { userId } = getAuthContext(c);
+    const invoiceId = c.req.param('id');
+    const body = await c.req.json();
+
+    const validationResult = updateClientDataSchema.safeParse(body);
+    if (!validationResult.success) {
+      return c.json(
+        {
+          error: 'Validation failed',
+          details: validationResult.error.issues,
+        },
+        400
+      );
+    }
+
+    const invoiceStorage = new InvoiceStorage(c.env.INVOICE_KV);
+    const metadata = await invoiceStorage.getInvoiceMetadata(invoiceId);
+
+    if (!metadata) {
+      return c.json({ error: 'Invoice not found' }, 404);
+    }
+
+    if (metadata.userId !== userId) {
+      return c.json({ error: 'Access denied' }, 403);
+    }
+
+    const updatedInvoice = await invoiceStorage.updateInvoiceClientData(
+      invoiceId,
+      validationResult.data
+    );
+
+    if (!updatedInvoice) {
+      return c.json({ error: 'Failed to update client data' }, 500);
+    }
+
+    return c.json(updatedInvoice.metadata);
+  } catch (error) {
+    console.error('Error updating invoice client data:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 });

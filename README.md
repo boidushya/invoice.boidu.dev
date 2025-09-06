@@ -73,26 +73,30 @@ Commands:
   list|ls [options]          📋 List recent invoices
   paid <invoiceId>           ✅ Mark invoice as paid
   get [options] <invoiceId>  📄 Download invoice PDF
+  client <invoiceId>         👤 Update client data for invoice
   stats                      📊 Revenue stats
-  clients                    👥 Manage clients
+  clients [options]          👥 Manage saved clients
   config [options]           ⚙️ Settings
   self-update                🔄 Update to latest version
   help [command]             display help for command
 
 ⏳ Common Workflow:
 
-  invoice setup              First-time setup
-  invoice new                Create invoice
-  invoice paid <id>          Mark <id> as paid
-  invoice get <id>           Download Invoice PDF for <id>
-  invoice stats              Check revenue
-  invoice self-update        Update to latest version
+  invoice setup                First-time setup
+  invoice new                  Create invoice
+  invoice paid <id>            Mark <id> as paid
+  invoice get <id>             Download Invoice PDF for <id>
+  invoice clients              Get saved client info
+  invoice stats                Check revenue
+  invoice self-update          Update to latest version
 
 ⚡ Power User Tips:
 
-  invoice new -c acme -a 1500 -d "Website redesign" # Super quick invoice
-  invoice clients                                   # List client nicknames
-  invoice config --due-days 15                      # Change defaults
+  invoice new -c acme -a 1500 -d "Website redesign"    # Super quick invoice
+  invoice client INV-ABC-1234 --seller --buyer         # Update invoice client data
+  invoice clients --update acme                        # Update saved client "acme"
+  invoice clients                                      # List all saved clients
+  invoice config --due-days 15                         # Change defaults
 ```
 
 ### Manual Installation & Usage
@@ -186,6 +190,51 @@ GET /folders
 Authorization: Bearer your_api_key
 ```
 
+#### Get Folder
+
+```http
+GET /folders/{folderId}
+Authorization: Bearer your_api_key
+```
+
+#### Update Folder Client Data
+
+```http
+PATCH /folders/{folderId}/client
+Authorization: Bearer your_api_key
+Content-Type: application/json
+
+{
+  "buyer": {
+    "name": "Updated Client Name",
+    "address": "456 Updated St, City, Country",
+    "email": "updated@client.com",
+    "phone": "+1 555 0123"
+  }
+}
+```
+
+#### Update Full Folder
+
+```http
+PUT /folders/{folderId}
+Authorization: Bearer your_api_key
+Content-Type: application/json
+
+{
+  "name": "Updated Project Name",
+  "company": "ACME",
+  "defaults": {
+    "buyer": {
+      "name": "Updated Client Name",
+      "address": "456 Updated St, City, Country", 
+      "email": "updated@client.com"
+    },
+    "currency": "EUR"
+  }
+}
+```
+
 ### Invoice Management
 
 #### Create Invoice
@@ -229,6 +278,67 @@ Authorization: Bearer your_api_key
 ```
 
 **Response:** PDF file with `Content-Type: application/pdf`
+
+#### Get Invoice Data (JSON)
+
+```http
+GET /invoices/INV-JOH-ACME-0001
+Authorization: Bearer your_api_key
+Accept: application/json
+```
+
+**Response:**
+
+```json
+{
+  "metadata": {
+    "id": "INV-JOH-ACME-0001",
+    "userId": "uuid",
+    "folderId": "uuid",
+    "number": 1,
+    "buyer": "Jane Doe",
+    "seller": "Acme Inc",
+    "total": 700,
+    "currency": "USD",
+    "status": "due",
+    "issueDate": "2025-01-01",
+    "dueDate": "2025-01-15",
+    "createdAt": "2025-01-01T10:00:00Z"
+  },
+  "request": {
+    "seller": { "name": "Acme Inc", "address": "123 Office Rd", "email": "invoices@acme.test" },
+    "buyer": { "name": "Jane Doe", "address": "456 Home St", "email": "jane@example.com" },
+    "items": [...],
+    "currency": "USD",
+    "issueDate": "2025-01-01",
+    "dueDate": "2025-01-15"
+  }
+}
+```
+
+#### Update Invoice Client Data
+
+```http
+PATCH /invoices/INV-JOH-ACME-0001/client
+Authorization: Bearer your_api_key
+Content-Type: application/json
+
+{
+  "seller": {
+    "name": "Updated Business Name",
+    "address": "123 New Office Rd, City, Country",
+    "email": "newemail@business.com",
+    "phone": "+1 555 0123"
+  },
+  "buyer": {
+    "name": "Updated Client Name", 
+    "address": "456 New Client St, City, Country",
+    "email": "newclient@example.com"
+  }
+}
+```
+
+**Response:** Updated invoice metadata
 
 #### Update Invoice Status
 
@@ -289,6 +399,39 @@ Authorization: Bearer your_api_key
 ```http
 GET /metadata/search?q=query
 Authorization: Bearer your_api_key
+```
+
+## Client Management
+
+The system supports two levels of client data management:
+
+### 1. Saved Clients (Folder Defaults)
+- **Folders** represent saved clients with default information
+- New invoices for a client use the saved defaults
+- Update saved client data to affect future invoices
+- **API:** `PATCH /folders/{folderId}/client`
+- **CLI:** `invoice clients --update <nickname>`
+
+### 2. Invoice-Specific Client Data
+- Each invoice stores its own copy of client information
+- Update client data for individual invoices without affecting defaults
+- Useful for correcting information on existing invoices
+- **API:** `PATCH /invoices/{invoiceId}/client`
+- **CLI:** `invoice client <invoiceId> --buyer --seller`
+
+### CLI Client Management Commands
+
+```bash
+# List all saved clients with contact details
+invoice clients
+
+# Update a saved client's information (affects future invoices)
+invoice clients --update <nickname>
+
+# Update client data for a specific invoice only
+invoice client INV-ABC-1234 --buyer          # Update client info
+invoice client INV-ABC-1234 --seller         # Update your business info  
+invoice client INV-ABC-1234 --seller --buyer # Update both
 ```
 
 ### Additional Endpoints

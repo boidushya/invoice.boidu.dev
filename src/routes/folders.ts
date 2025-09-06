@@ -1,6 +1,6 @@
 import type { CloudflareEnv } from '@/types';
 import { getAuthContext, requireAuth } from '@/utils/auth';
-import { createFolderSchema, paginationSchema } from '@/utils/schemas';
+import { createFolderSchema, paginationSchema, updateFolderClientSchema } from '@/utils/schemas';
 import { FolderStorage, InvoiceStorage } from '@/utils/storage';
 import { Hono } from 'hono';
 
@@ -105,6 +105,55 @@ folderRoutes.put('/:id', requireAuth(), async (c) => {
     return c.json(updatedFolder);
   } catch (error) {
     console.error('Error updating folder:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+folderRoutes.patch('/:id/client', requireAuth(), async (c) => {
+  try {
+    const { userId } = getAuthContext(c);
+    const folderId = c.req.param('id');
+    const body = await c.req.json();
+
+    const folderStorage = new FolderStorage(c.env.INVOICE_KV);
+    const folder = await folderStorage.getFolderById(folderId);
+
+    if (!folder) {
+      return c.json({ error: 'Folder not found' }, 404);
+    }
+
+    if (folder.userId !== userId) {
+      return c.json({ error: 'Access denied' }, 403);
+    }
+
+    const validationResult = updateFolderClientSchema.safeParse(body);
+    if (!validationResult.success) {
+      return c.json(
+        {
+          error: 'Validation failed',
+          details: validationResult.error.issues,
+        },
+        400
+      );
+    }
+
+    // Update the folder's buyer information
+    const updatedDefaults = {
+      ...folder.defaults,
+      buyer: validationResult.data.buyer,
+    };
+
+    const updatedFolder = await folderStorage.updateFolder(folderId, {
+      defaults: updatedDefaults,
+    });
+
+    if (!updatedFolder) {
+      return c.json({ error: 'Failed to update client data' }, 500);
+    }
+
+    return c.json(updatedFolder);
+  } catch (error) {
+    console.error('Error updating folder client data:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 });

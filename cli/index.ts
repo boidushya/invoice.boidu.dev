@@ -16,6 +16,7 @@ interface SellerBuyer {
   name: string;
   address: string;
   email: string;
+  phone?: string;
 }
 
 interface ApiResponse<T = unknown> {
@@ -95,7 +96,7 @@ class InvoiceAPI {
     this.apiKey = config.get('apiKey');
   }
 
-  private async request<T = unknown>(
+  async request<T = unknown>(
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<ApiResponse<T>> {
@@ -171,6 +172,36 @@ class InvoiceAPI {
       method: 'PATCH',
       body: { status },
     });
+  }
+
+  async updateInvoiceClient(
+    invoiceId: string,
+    clientData: { seller?: SellerBuyer; buyer?: SellerBuyer }
+  ): Promise<ApiResponse<InvoiceData>> {
+    return this.request<InvoiceData>(`/invoices/${invoiceId}/client`, {
+      method: 'PATCH',
+      body: clientData,
+    });
+  }
+
+  async getInvoiceData(invoiceId: string): Promise<ApiResponse<unknown>> {
+    return this.request(`/invoices/${invoiceId}`, {
+      method: 'GET',
+    });
+  }
+
+  async updateFolderClient(
+    folderId: string,
+    clientData: { buyer: SellerBuyer }
+  ): Promise<ApiResponse<FolderData>> {
+    return this.request<FolderData>(`/folders/${folderId}/client`, {
+      method: 'PATCH',
+      body: clientData,
+    });
+  }
+
+  async getFolder(folderId: string): Promise<ApiResponse<FolderData>> {
+    return this.request<FolderData>(`/folders/${folderId}`);
   }
 
   async getStats(): Promise<ApiResponse<StatsData>> {
@@ -754,6 +785,243 @@ program
     }
   });
 
+// Update client data for existing invoice
+program
+  .command('client <invoiceId>')
+  .description('👤 Update client data for invoice')
+  .option('--seller', 'Update seller (your business) information')
+  .option('--buyer', 'Update buyer (client) information')
+  .action(async (invoiceId: string, options) => {
+    try {
+      ensureSetup();
+
+      if (!options.seller && !options.buyer) {
+        console.error(chalk.red('Error: Must specify --seller or --buyer'));
+        console.log('');
+        console.log(chalk.gray('Examples:'));
+        console.log(
+          chalk.cyan('  invoice client INV-ABC-1234 --seller'),
+          '# Update your business info'
+        );
+        console.log(chalk.cyan('  invoice client INV-ABC-1234 --buyer'), '# Update client info');
+        console.log(chalk.cyan('  invoice client INV-ABC-1234 --seller --buyer'), '# Update both');
+        process.exit(1);
+      }
+
+      // First get the invoice data to see current information
+      const spinner = ora('Loading current invoice data...').start();
+      const api = new InvoiceAPI();
+
+      // Set Accept header to get JSON data instead of PDF
+      const originalRequest = api.request.bind(api);
+      api.request = async function <T>(endpoint: string, options: RequestOptions = {}) {
+        const headers = {
+          'Content-Type': 'application/json',
+          'User-Agent': 'invoice/1.0.0',
+          Accept: 'application/json',
+          ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
+        };
+        const { method = 'GET', body } = options;
+
+        try {
+          const response = await fetch(`${this.baseUrl}${endpoint}`, {
+            method,
+            headers,
+            body: body ? JSON.stringify(body) : undefined,
+          });
+
+          const data = (await response.json()) as {
+            error?: string;
+            details?: Array<{ message: string }>;
+          };
+          return {
+            success: response.ok,
+            data: response.ok ? (data as T) : undefined,
+            error: !response.ok ? data.error : undefined,
+            details: !response.ok ? data.details : undefined,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+        }
+      };
+
+      const currentResult = await api.getInvoiceData(invoiceId);
+
+      if (!currentResult.success || !currentResult.data) {
+        spinner.fail('Failed to load invoice');
+        console.error(chalk.red('Error:'), currentResult.error || 'Invoice not found');
+        process.exit(1);
+      }
+
+      const invoiceData = currentResult.data as {
+        request?: { seller?: SellerBuyer; buyer?: SellerBuyer };
+      };
+
+      // Provide safe defaults for seller and buyer
+      const currentSeller: SellerBuyer = invoiceData.request?.seller || {
+        name: '',
+        address: '',
+        email: '',
+      };
+      const currentBuyer: SellerBuyer = invoiceData.request?.buyer || {
+        name: '',
+        address: '',
+        email: '',
+      };
+      spinner.succeed('Invoice data loaded');
+
+      console.log('');
+      console.log(chalk.blue.bold('📄 Current Invoice Information'));
+      console.log('━'.repeat(50));
+
+      // Display current seller info
+      if (currentSeller.name) {
+        console.log(chalk.cyan('🏢 Seller (Your Business):'));
+        console.log(`  Name: ${currentSeller.name}`);
+        console.log(`  Address: ${currentSeller.address}`);
+        console.log(`  Email: ${currentSeller.email}`);
+        if (currentSeller.phone) console.log(`  Phone: ${currentSeller.phone}`);
+        console.log('');
+      }
+
+      // Display current buyer info
+      if (currentBuyer.name) {
+        console.log(chalk.cyan('👤 Buyer (Client):'));
+        console.log(`  Name: ${currentBuyer.name}`);
+        console.log(`  Address: ${currentBuyer.address}`);
+        console.log(`  Email: ${currentBuyer.email}`);
+        if (currentBuyer.phone) console.log(`  Phone: ${currentBuyer.phone}`);
+        console.log('');
+      }
+
+      const updateData: { seller?: SellerBuyer; buyer?: SellerBuyer } = {};
+
+      // Collect new seller information
+      if (options.seller) {
+        console.log(chalk.yellow.bold('✏️  Update Seller Information'));
+        console.log('━'.repeat(30));
+
+        const sellerAnswers = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'name',
+            message: 'Business name:',
+            default: currentSeller.name,
+            validate: (input: string) => (input.trim() ? true : 'Required'),
+          },
+          {
+            type: 'input',
+            name: 'address',
+            message: 'Business address:',
+            default: currentSeller.address,
+            validate: (input: string) => (input.trim() ? true : 'Required'),
+          },
+          {
+            type: 'input',
+            name: 'email',
+            message: 'Business email:',
+            default: currentSeller.email,
+            validate: (input: string) =>
+              /^[^@]+@[^@]+\.[^@]+$/.test(input) ? true : 'Valid email required',
+          },
+          {
+            type: 'input',
+            name: 'phone',
+            message: 'Business phone (optional):',
+            default: currentSeller.phone || '',
+          },
+        ]);
+
+        updateData.seller = {
+          name: sellerAnswers.name,
+          address: sellerAnswers.address,
+          email: sellerAnswers.email,
+          ...(sellerAnswers.phone.trim() && { phone: sellerAnswers.phone }),
+        };
+      }
+
+      // Collect new buyer information
+      if (options.buyer) {
+        console.log(chalk.yellow.bold('✏️  Update Client Information'));
+        console.log('━'.repeat(30));
+
+        const buyerAnswers = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'name',
+            message: 'Client name:',
+            default: currentBuyer.name,
+            validate: (input: string) => (input.trim() ? true : 'Required'),
+          },
+          {
+            type: 'input',
+            name: 'address',
+            message: 'Client address:',
+            default: currentBuyer.address,
+            validate: (input: string) => (input.trim() ? true : 'Required'),
+          },
+          {
+            type: 'input',
+            name: 'email',
+            message: 'Client email:',
+            default: currentBuyer.email,
+            validate: (input: string) =>
+              /^[^@]+@[^@]+\.[^@]+$/.test(input) ? true : 'Valid email required',
+          },
+          {
+            type: 'input',
+            name: 'phone',
+            message: 'Client phone (optional):',
+            default: currentBuyer.phone || '',
+          },
+        ]);
+
+        updateData.buyer = {
+          name: buyerAnswers.name,
+          address: buyerAnswers.address,
+          email: buyerAnswers.email,
+          ...(buyerAnswers.phone.trim() && { phone: buyerAnswers.phone }),
+        };
+      }
+
+      // Restore original request method and update the invoice
+      api.request = originalRequest;
+
+      const updateSpinner = ora('Updating client data...').start();
+      const result = await api.updateInvoiceClient(invoiceId, updateData);
+
+      if (result.success && result.data) {
+        updateSpinner.succeed('Client data updated! ✅');
+        console.log('');
+        console.log(chalk.cyan('Invoice ID:'), invoiceId);
+
+        if (updateData.seller) {
+          console.log(chalk.green('✅ Seller information updated'));
+        }
+        if (updateData.buyer) {
+          console.log(chalk.green('✅ Client information updated'));
+        }
+
+        console.log('');
+        console.log(chalk.gray('💡 Tip: Download the updated PDF with:'));
+        console.log(chalk.cyan(`  invoice get ${invoiceId}`));
+      } else {
+        updateSpinner.fail('Failed to update client data');
+        console.error(chalk.red('Error:'), result.error);
+        if (result.details) {
+          for (const detail of result.details) {
+            console.error(chalk.red('  -'), detail.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error');
+    }
+  });
+
 // Revenue stats - important for freelancers
 program
   .command('stats')
@@ -820,10 +1088,18 @@ program
 program
   .command('clients')
   .description('👥 Manage clients')
-  .action(async () => {
+  .option('--update <nickname>', 'Update client information by nickname')
+  .option('--list', 'List all clients (default)')
+  .action(async (options) => {
     try {
       ensureSetup();
 
+      if (options.update) {
+        await updateClientData(options.update);
+        return;
+      }
+
+      // List clients (default behavior)
       const folders = config.get('folders');
       const clientList = Object.entries(folders);
 
@@ -840,19 +1116,124 @@ program
       for (const [nickname, folder] of clientList) {
         const isDefault = config.get('defaultFolder') === nickname;
         const marker = isDefault ? chalk.green('● ') : chalk.gray('○ ');
+        const folderData = folder as FolderData;
         console.log(
-          `${marker}${chalk.cyan(nickname)} - ${(folder as FolderData).name} (${(folder as FolderData).company})`
+          `${marker}${chalk.cyan(nickname)} - ${folderData.name} (${folderData.company})`
         );
+        console.log(`  ${chalk.gray('Email:')} ${folderData.defaults.buyer.email}`);
+        console.log(`  ${chalk.gray('Address:')} ${folderData.defaults.buyer.address}`);
+        if (folderData.defaults.buyer.phone) {
+          console.log(`  ${chalk.gray('Phone:')} ${folderData.defaults.buyer.phone}`);
+        }
+        console.log('');
       }
 
-      console.log('');
-      console.log(chalk.gray.bold('💡 Tip: Create new or use existing client with nickname:'));
-      console.log('');
-      console.log(chalk.gray('   invoice new -c <nickname>'));
+      console.log(chalk.gray.bold('💡 Tips:'));
+      console.log(chalk.gray('   invoice clients --update <nickname>'), '# Update client info');
+      console.log(chalk.gray('   invoice new -c <nickname>'), '# Create invoice for client');
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error');
     }
   });
+
+// Helper function to update client data
+async function updateClientData(nickname: string): Promise<void> {
+  const folders = config.get('folders');
+  const folder = folders[nickname.toLowerCase()] as FolderData;
+
+  if (!folder) {
+    console.error(chalk.red(`Error: Client "${nickname}" not found`));
+    console.log('');
+    console.log(chalk.gray('Available clients:'));
+    for (const [nick, folderData] of Object.entries(folders)) {
+      console.log(`  ${chalk.cyan(nick)} - ${(folderData as FolderData).name}`);
+    }
+    return;
+  }
+
+  console.log(chalk.blue.bold('📝 Update Client Information'));
+  console.log('━'.repeat(40));
+  console.log('');
+  console.log(chalk.cyan('Current Information:'));
+  console.log(`  Name: ${folder.defaults.buyer.name}`);
+  console.log(`  Address: ${folder.defaults.buyer.address}`);
+  console.log(`  Email: ${folder.defaults.buyer.email}`);
+  if (folder.defaults.buyer.phone) {
+    console.log(`  Phone: ${folder.defaults.buyer.phone}`);
+  }
+  console.log('');
+
+  const answers = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'name',
+      message: 'Client name:',
+      default: folder.defaults.buyer.name,
+      validate: (input: string) => (input.trim() ? true : 'Required'),
+    },
+    {
+      type: 'input',
+      name: 'address',
+      message: 'Client address:',
+      default: folder.defaults.buyer.address,
+      validate: (input: string) => (input.trim() ? true : 'Required'),
+    },
+    {
+      type: 'input',
+      name: 'email',
+      message: 'Client email:',
+      default: folder.defaults.buyer.email,
+      validate: (input: string) =>
+        /^[^@]+@[^@]+\.[^@]+$/.test(input) ? true : 'Valid email required',
+    },
+    {
+      type: 'input',
+      name: 'phone',
+      message: 'Client phone (optional):',
+      default: folder.defaults.buyer.phone || '',
+    },
+  ]);
+
+  const spinner = ora('Updating client data...').start();
+  const api = new InvoiceAPI();
+
+  const updatedBuyer = {
+    name: answers.name,
+    address: answers.address,
+    email: answers.email,
+    ...(answers.phone.trim() && { phone: answers.phone }),
+  };
+
+  const result = await api.updateFolderClient(folder.id, { buyer: updatedBuyer });
+
+  if (result.success && result.data) {
+    spinner.succeed('Client data updated! ✅');
+
+    // Update local cache
+    const updatedFolder = result.data;
+    folders[nickname.toLowerCase()] = updatedFolder;
+    config.set('folders', folders);
+
+    console.log('');
+    console.log(chalk.cyan('Updated Information:'));
+    console.log(`  Name: ${updatedFolder.defaults.buyer.name}`);
+    console.log(`  Address: ${updatedFolder.defaults.buyer.address}`);
+    console.log(`  Email: ${updatedFolder.defaults.buyer.email}`);
+    if (updatedFolder.defaults.buyer.phone) {
+      console.log(`  Phone: ${updatedFolder.defaults.buyer.phone}`);
+    }
+    console.log('');
+    console.log(chalk.gray('💡 Next invoices for this client will use the updated information.'));
+  } else {
+    spinner.fail('Failed to update client data');
+    console.error(chalk.red('Error:'), result.error);
+    if (result.details) {
+      for (const detail of result.details) {
+        console.error(chalk.red('  -'), detail.message);
+      }
+    }
+  }
+}
 
 // Config management for power users
 program
@@ -962,6 +1343,7 @@ function help() {
   console.log(`   ${chalk.cyan('invoice new')}                Create invoice`);
   console.log(`   ${chalk.cyan('invoice paid <id>')}          Mark <id> as paid`);
   console.log(`   ${chalk.cyan('invoice get <id>')}           Download Invoice PDF for <id>`);
+  console.log(`   ${chalk.cyan('invoice clients')}            Get saved client info`);
   console.log(`   ${chalk.cyan('invoice stats')}              Check revenue`);
   console.log(`   ${chalk.cyan('invoice self-update')}        Update to latest version`);
   console.log('');
@@ -971,7 +1353,13 @@ function help() {
     `   ${chalk.white('invoice new -c acme -a 1500 -d "Website redesign"')}\t${chalk.gray('# Super quick invoice')}`
   );
   console.log(
-    `   ${chalk.white('invoice clients')}\t\t\t\t\t${chalk.gray('# List client nicknames')}`
+    `   ${chalk.white('invoice client INV-ABC-1234 --seller --buyer')}\t\t${chalk.gray('# Update invoice client data')}`
+  );
+  console.log(
+    `   ${chalk.white('invoice clients --update acme')}\t\t\t${chalk.gray('# Update saved client "acme"')}`
+  );
+  console.log(
+    `   ${chalk.white('invoice clients')}\t\t\t\t\t${chalk.gray('# List all saved clients')}`
   );
   console.log(
     `   ${chalk.white('invoice config --due-days 15')}\t\t\t\t${chalk.gray('# Change defaults')}`
