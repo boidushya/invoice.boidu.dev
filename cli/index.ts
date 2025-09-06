@@ -194,9 +194,25 @@ class InvoiceAPI {
     folderId: string,
     clientData: { buyer: SellerBuyer }
   ): Promise<ApiResponse<FolderData>> {
-    return this.request<FolderData>(`/folders/${folderId}/client`, {
-      method: 'PATCH',
-      body: clientData,
+    // First get the current folder data
+    const currentFolder = await this.getFolder(folderId);
+    if (!currentFolder.success || !currentFolder.data) {
+      return { success: false, error: 'Could not fetch current folder data' };
+    }
+    
+    // Update just the buyer information while preserving everything else
+    const updatedFolderData = {
+      ...currentFolder.data,
+      defaults: {
+        ...currentFolder.data.defaults,
+        buyer: clientData.buyer,
+      },
+    };
+    
+    // Use the existing PUT endpoint to update the full folder
+    return this.request<FolderData>(`/folders/${folderId}`, {
+      method: 'PUT',
+      body: updatedFolderData,
     });
   }
 
@@ -1204,34 +1220,46 @@ async function updateClientData(nickname: string): Promise<void> {
     ...(answers.phone.trim() && { phone: answers.phone }),
   };
 
-  const result = await api.updateFolderClient(folder.id, { buyer: updatedBuyer });
+  try {
+    const result = await api.updateFolderClient(folder.id, { buyer: updatedBuyer });
+  
+    if (result.success && result.data) {
+      spinner.succeed('Client data updated! ✅');
 
-  if (result.success && result.data) {
-    spinner.succeed('Client data updated! ✅');
+      // Update local cache
+      const updatedFolder = result.data;
+      folders[nickname.toLowerCase()] = updatedFolder;
+      config.set('folders', folders);
 
-    // Update local cache
-    const updatedFolder = result.data;
-    folders[nickname.toLowerCase()] = updatedFolder;
-    config.set('folders', folders);
-
-    console.log('');
-    console.log(chalk.cyan('Updated Information:'));
-    console.log(`  Name: ${updatedFolder.defaults.buyer.name}`);
-    console.log(`  Address: ${updatedFolder.defaults.buyer.address}`);
-    console.log(`  Email: ${updatedFolder.defaults.buyer.email}`);
-    if (updatedFolder.defaults.buyer.phone) {
-      console.log(`  Phone: ${updatedFolder.defaults.buyer.phone}`);
-    }
-    console.log('');
-    console.log(chalk.gray('💡 Next invoices for this client will use the updated information.'));
-  } else {
-    spinner.fail('Failed to update client data');
-    console.error(chalk.red('Error:'), result.error);
-    if (result.details) {
-      for (const detail of result.details) {
-        console.error(chalk.red('  -'), detail.message);
+      console.log('');
+      console.log(chalk.cyan('Updated Information:'));
+      console.log(`  Name: ${updatedFolder.defaults.buyer.name}`);
+      console.log(`  Address: ${updatedFolder.defaults.buyer.address}`);
+      console.log(`  Email: ${updatedFolder.defaults.buyer.email}`);
+      if (updatedFolder.defaults.buyer.phone) {
+        console.log(`  Phone: ${updatedFolder.defaults.buyer.phone}`);
+      }
+      console.log('');
+      console.log(chalk.gray('💡 Next invoices for this client will use the updated information.'));
+    } else {
+      spinner.fail('Failed to update client data');
+      console.error(chalk.red('Error:'), result.error);
+      if (result.details) {
+        for (const detail of result.details) {
+          console.error(chalk.red('  -'), detail.message);
+        }
       }
     }
+  } catch (error) {
+    spinner.fail('Failed to update client data');
+    console.error(chalk.red('Network Error:'), error instanceof Error ? error.message : 'Unknown error');
+    console.log('');
+    console.log(chalk.yellow('💡 This might happen if:'));
+    console.log(chalk.gray('  • The API server is not running'));
+    console.log(chalk.gray('  • There are network connectivity issues')); 
+    console.log(chalk.gray('  • The endpoint has not been deployed yet'));
+    console.log('');
+    console.log(chalk.cyan('Current API URL:'), config.get('apiUrl'));
   }
 }
 
