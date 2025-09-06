@@ -1106,7 +1106,7 @@ program
 program
   .command('clients')
   .description('👥 Manage clients')
-  .option('--update <nickname>', 'Update client information by nickname')
+  .option('-u, --update <nickname>', 'Update client information by nickname')
   .option('--list', 'List all clients (default)')
   .action(async (options) => {
     try {
@@ -1147,7 +1147,7 @@ program
       }
 
       console.log(chalk.gray.bold('💡 Tips:'));
-      console.log(chalk.gray('   invoice clients --update <nickname>'), '# Update client info');
+      console.log(chalk.gray('   invoice clients -u <nickname>'), '# Update client info');
       console.log(chalk.gray('   invoice new -c <nickname>'), '# Create invoice for client');
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error');
@@ -1388,7 +1388,7 @@ function help() {
     `   ${chalk.white('invoice client INV-ABC-1234 --seller --buyer')}\t\t${chalk.gray('# Update invoice client data')}`
   );
   console.log(
-    `   ${chalk.white('invoice clients --update acme')}\t\t\t${chalk.gray('# Update saved client "acme"')}`
+    `   ${chalk.white('invoice clients -u acme')}\t\t\t\t${chalk.gray('# Update saved client "acme"')}`
   );
   console.log(
     `   ${chalk.white('invoice clients')}\t\t\t\t\t${chalk.gray('# List all saved clients')}`

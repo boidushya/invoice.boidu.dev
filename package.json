@@ -1,6 +1,6 @@
 {
   "name": "invoice.boidu.dev",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Cloudflare-hosted Invoice API with Hono and TypeScript",
   "main": "src/index.ts",
   "bin": {
